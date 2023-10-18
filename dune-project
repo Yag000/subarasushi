@@ -5,22 +5,18 @@
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (uri git+https://gaufre.informatique.univ-paris-diderot.fr/iglesias/subarasushi))
 
-(authors "Author Name")
+(authors "Yago Iglesias Vazquez, Yanis Lacenne, Tony Ly Soan, Nathan Guetteville")
 
-(maintainers "Maintainer Name")
+(maintainers "Yago Iglesias Vazquez, Yanis Lacenne, Tony Ly Soan, Nathan Guetteville")
 
-(license LICENSE)
-
-(documentation https://url/to/documentation)
+(license MIT)
 
 (package
  (name subarasushi)
- (synopsis "A short synopsis")
- (description "A longer description")
- (depends ocaml dune)
- (tags
-  (topics "to describe" your project)))
+ (synopsis "Sushi Go implementation in OCaml")
+ (description "Sushi Go implementation in OCaml")
+ (depends ocaml dune ppx_inline_test ppx_expect alcotest qcheck qcheck-alcotest))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/dune-files.html#dune-project

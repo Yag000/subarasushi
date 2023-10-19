@@ -15,8 +15,8 @@
 
 (package
  (name subarasushi)
- (synopsis "Sushi Go implementation in OCaml")
- (description "Sushi Go implementation in OCaml")
+ (synopsis "Sushi Go Party implementation in OCaml")
+ (description "Sushi Go Party implementation in OCaml")
  (depends ocaml dune ppx_inline_test ppx_expect alcotest qcheck qcheck-alcotest))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/dune-files.html#dune-project

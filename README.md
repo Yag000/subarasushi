@@ -1,3 +1,5 @@
-# SubaraSushi
+# Sushi Go Party
 
-Ocaml port of Sushi Go
+Ocaml implementation of Sushi Go Party
+
+By Yago Iglesias Vazquez, Yanis Lacenne, Tony Ly Soan and Nathan Guetteville

@@ -2,40 +2,20 @@
 
 Ocaml implementation of Sushi Go Party. The rules are available [here](doc/rulebook.pdf).
 
-## Development environment setup
+## How to compile
 
-Install [Opam](https://opam.ocaml.org/doc/Install.html), the OCaml
-package manager, on your system.
+This project uses [dune](https://dune.build/). To compile the project, run the following command:
 
-For convenience, we setup a [local](https://opam.ocaml.org/blog/opam-local-switches/) Opam distribution, using the following commands:
-
-```
-opam switch create . --deps-only --with-doc --with-test
-eval $(opam env)
+```bash
+dune build
 ```
 
-Configure your favorite text editor, see the [Real World OCaml setup](http://dev.realworldocaml.org/install.html#editor-setup).
+As an API, this code is not meant to be run as an executable.
 
-If need be, you can invoke Dune to re-format the whole codebase:
+## How to contribute
 
-```
-dune fmt
-```
-
-## Running the tests
-
-To execute all the tests, type:
-
-```
-dune runtest
-```
-
-This can be combined with continuous build & test, using
-
-```
-dune runtest --watch
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Authors
 
-Yago Iglesias Vazquez, Yanis Lacenne, Tony Ly Soan and Nathan Guetteville
+Yago Iglesias Vázquez, Yanis Lacenne, Tony Ly Soan and Nathan Guetteville

@@ -1,27 +1,29 @@
 type nigiri = Egg | Salmon | Squid
 type sushi_roll = Maki of int | Temaki | Uramaki of int
+type shape = Circle | Triangle | Square | Rectangle
+type fruit_kind = Watermelon | Orange | Pineapple
 
 type appetizer =
   | Dumpling
   | Edamame
   | Eel
-  | Onigiri
+  | Onigiri of shape
   | MisoSoup
   | Sashimi
   | Tempura
   | Tofu
 
 type special =
-  | Chopsticks
-  | Spoon
-  | Menu
+  | Chopsticks of int
+  | Spoon of int
+  | Menu of int
   | SoySauce
   | SpecialOrder
-  | TakeOutBox
+  | TakeOutBox of int
   | Tea
-  | Wasabi
+  | Wasabi of nigiri option
 
-type dessert = MatchaIceCream | Fruit | Pudding
+type dessert = MatchaIceCream | Fruit of fruit_kind list | Pudding
 
 type card =
   | Nigiri of nigiri

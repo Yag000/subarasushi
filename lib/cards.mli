@@ -51,3 +51,34 @@ There exists a set of default menus that are available to the player. The player
 
 val menu_of_default_menu : default_menu -> menu
 (** Initializes a menu from a default menu. *)
+
+(** Using a module to avoid conflicts with the [card] type. *)
+module CardType : sig
+  type t =
+    | Nigiri
+    | Maki
+    | Uramaki
+    | Temaki
+    | Dumpling
+    | Edamame
+    | Eel
+    | Onigiri
+    | MisoSoup
+    | Sashimi
+    | Tempura
+    | Tofu
+    | Chopsticks
+    | Spoon
+    | Menu
+    | SoySauce
+    | SpecialOrder
+    | TakeOutBox
+    | Tea
+    | Wasabi
+    | MatchaIceCream
+    | Fruit
+    | Pudding
+
+  val card_type_of_card : card -> t
+  (** [card_type_of_card card] is the type of [card]. *)
+end

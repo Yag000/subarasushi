@@ -68,3 +68,58 @@ let menu_of_default_menu = function
       (Maki 0, Tempura, Dumpling, Eel, Spoon 0, Chopsticks 0, MatchaIceCream)
   | DinnerForTwo ->
       (Uramaki 0, Onigiri Circle, Tofu, MisoSoup, Menu 0, SpecialOrder, Fruit [])
+
+(** Using a module to avoid conflicts with the [card] type. *)
+module CardType = struct
+  type t =
+    | Nigiri
+    | Maki
+    | Uramaki
+    | Temaki
+    | Dumpling
+    | Edamame
+    | Eel
+    | Onigiri
+    | MisoSoup
+    | Sashimi
+    | Tempura
+    | Tofu
+    | Chopsticks
+    | Spoon
+    | Menu
+    | SoySauce
+    | SpecialOrder
+    | TakeOutBox
+    | Tea
+    | Wasabi
+    | MatchaIceCream
+    | Fruit
+    | Pudding
+
+  (** [card_type_of_card card] is the type of [card]. *)
+  let rec card_type_of_card : card -> t = function
+    | Nigiri _ -> Nigiri
+    | SushiRoll (Maki _) -> Maki
+    | SushiRoll (Uramaki _) -> Uramaki
+    | SushiRoll Temaki -> Temaki
+    | Appetizer Dumpling -> Dumpling
+    | Appetizer Edamame -> Edamame
+    | Appetizer Eel -> Eel
+    | Appetizer (Onigiri _) -> Onigiri
+    | Appetizer MisoSoup -> MisoSoup
+    | Appetizer Sashimi -> Sashimi
+    | Appetizer Tempura -> Tempura
+    | Appetizer Tofu -> Tofu
+    | Special (Chopsticks _) -> Chopsticks
+    | Special (Spoon _) -> Spoon
+    | Special (Menu _) -> Menu
+    | Special SoySauce -> SoySauce
+    | Special SpecialOrder -> SpecialOrder
+    | Special (TakeOutBox _) -> TakeOutBox
+    | Special Tea -> Tea
+    | Special (Wasabi _) -> Wasabi
+    | Dessert MatchaIceCream -> MatchaIceCream
+    | Dessert (Fruit _) -> Fruit
+    | Dessert Pudding -> Pudding
+    | FaceDown card -> card_type_of_card card
+end

@@ -1,2 +1,3 @@
-(test
- (name subarasushi))
+(tests
+ (names test_points test_utils)
+ (libraries subarasushi alcotest qcheck qcheck-alcotest))

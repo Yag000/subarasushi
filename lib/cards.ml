@@ -31,6 +31,7 @@ type card =
   | Appetizer of appetizer
   | Special of special
   | Dessert of dessert
+  | FaceDown of card
 
 type default_menu =
   | MyFirstMeal

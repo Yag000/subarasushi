@@ -31,6 +31,7 @@ type card =
   | Appetizer of appetizer
   | Special of special
   | Dessert of dessert
+  | FaceDown of card
 
 (** Set of default menus for the game. *)
 type default_menu =

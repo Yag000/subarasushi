@@ -50,7 +50,7 @@ let menu_of_default_menu = function
   | MyFirstMeal ->
       (Maki 0, Tempura, Sashimi, MisoSoup, Wasabi None, Tea, MatchaIceCream)
   | SushiGo ->
-      (Maki 0, Tempura, Sashimi, Dumpling, Chopsticks 0, Wasabi None, Fruit [])
+      (Maki 0, Tempura, Sashimi, Dumpling, Chopsticks 0, Wasabi None, Pudding)
   | PartySampler ->
       (Temaki, Tempura, Dumpling, Tofu, Wasabi None, Menu 0, MatchaIceCream)
   | MasterMenu ->

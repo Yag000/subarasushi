@@ -1,2 +1,4 @@
 (library
- (name subarasushi))
+ (name subarasushi)
+ (preprocess
+  (pps ppx_deriving.show ppx_deriving.eq)))

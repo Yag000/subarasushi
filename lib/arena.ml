@@ -56,3 +56,85 @@ type player_strategy = {
   choose_card_to_give : choose_card_to_give;
 }
 (** Player strategy. *)
+
+type game_settings = { players : (player_strategy * string) list; menu : menu }
+(** Basic game settings. It contains the players (how they are called and their strategy) and the menu. *)
+
+type strategized_player = {
+  player : player;
+  strategy : player_strategy; [@warning "-69"]
+}
+(** Player with a strategy. *)
+
+type internal_game_status = {
+  players : strategized_player list;
+  played_uramakis : int; [@warning "-69"]
+  current_round : int;
+  current_turn : int;
+  menu : menu;
+}
+(** Current game status. This contains the details needed to
+    compute the next game status. This information is private and a
+    public counterpart is given by [game_status]. It is easy
+    to convert an internal game status to a game status, but not the other way around
+    See [game_status_of_internal_game_status] for more details.
+    *)
+
+(** Quick conversion from [internal_game_status] to [game_status]. Should
+    be used to give players information about the game. *)
+let[@warning "-32"] game_status_of_internal_game_status internal_game_status =
+  let players =
+    List.map (fun { player; _ } -> player) internal_game_status.players
+  in
+  {
+    players;
+    current_round = internal_game_status.current_round;
+    current_turn = internal_game_status.current_turn;
+    menu = internal_game_status.menu;
+  }
+
+(** Initializes an [internal_game_status] from [game_settings]. 
+    @raise Invalid_argument if there are not enough or too many players. *)
+let initial_game_status (game_settings : game_settings) : internal_game_status =
+  let players =
+    List.map
+      (fun (strategy, name) -> { player = default_named_player name; strategy })
+      game_settings.players
+  in
+  let menu = game_settings.menu in
+  if List.length players < 2 then raise (Invalid_argument "Not enough players")
+  else if List.length players > 8 then
+    raise (Invalid_argument "Too many players")
+  else
+    { players; played_uramakis = 0; current_round = 1; current_turn = 1; menu }
+
+(** Play a turn of Sushi Go Party. *)
+let[@warning "-32"] play_turn (_internal_game_status : internal_game_status) :
+    internal_game_status =
+  failwith "TODO"
+
+(** Advance one round. They current turn is reset to 1. *)
+let advance_one_round (internal_game_status : internal_game_status) :
+    internal_game_status =
+  {
+    internal_game_status with
+    current_round = internal_game_status.current_round + 1;
+    current_turn = 1;
+  }
+
+(** Play a round of Sushi Go Party. *)
+let play_round (internal_game_status : internal_game_status) :
+    internal_game_status =
+  advance_one_round internal_game_status
+
+(** From a  given [game_settings], this function plays a game of Sushi Go Party. *)
+let arena (game_settings : game_settings) =
+  let internal_game_status = initial_game_status game_settings in
+  let rec loop (internal_game_status : internal_game_status) =
+    if internal_game_status.current_round > 3 then internal_game_status
+    else
+      let internal_game_status = play_round internal_game_status in
+      loop internal_game_status
+  in
+  let _post_rounds_internal_game_status = loop internal_game_status in
+  ()

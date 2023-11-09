@@ -56,3 +56,9 @@ type player_strategy = {
   choose_card_to_give : choose_card_to_give;
 }
 (** Player strategy. *)
+
+type game_settings = { players : (player_strategy * string) list; menu : menu }
+(** Basic game settings. It contains the players (how they are called and their strategy) and the menu. *)
+
+val arena : game_settings -> unit
+(** Start a game with the given settings. *)

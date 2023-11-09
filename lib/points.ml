@@ -344,12 +344,7 @@ let count_round_points ~played_uramakis players =
            + count_hand_points (List.nth hands i)
                (Utils.list_remove_index i hands) ))
   |> List.map (fun (player, turn_points) ->
-         {
-           name = player.name;
-           table = player.table;
-           desserts = player.desserts;
-           score = player.score + turn_points;
-         })
+         { player with score = player.score + turn_points })
 
 (** Computes the points won using the puddings. *)
 let compute_pudding_points l =
@@ -417,9 +412,4 @@ let count_dessert_points players =
       compute_pudding_points positions)
   |> List.combine players
   |> List.map (fun (player, dessert_points) ->
-         {
-           name = player.name;
-           table = player.table;
-           desserts = player.desserts;
-           score = player.score + dessert_points;
-         })
+         { player with score = player.score + dessert_points })

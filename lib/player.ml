@@ -4,3 +4,7 @@ type player = {
   desserts : Cards.dessert list;
   table : Cards.hand;
 }
+
+(** Returns a new player with the given name. Every other field is
+    initialized to the default value. *)
+let default_named_player name = { name; score = 0; desserts = []; table = [] }

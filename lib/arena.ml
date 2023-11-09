@@ -10,7 +10,7 @@ type game_status = {
 (** Current game status. This information is public, no details about the
 players' hands are given. *)
 
-type player_status = { player : player; hand : card list }
+type player_status = { player : player; hand : hand }
 (** Player status. This information should only be given to the [player] that has to make a decision.
     The player's hand is given, but no other player's hand is given.
  *)

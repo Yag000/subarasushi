@@ -10,7 +10,7 @@ type game_status = {
 (** Current game status. This information is public, no details about the
 players' hands are given. *)
 
-type player_status = { player : player; hand : card list }
+type player_status = { player : player; hand : hand }
 (** Player status. This information should only be given to the [player] that has to make a decision.
     The player's hand is given, but no other player's hand is given.
  *)
@@ -30,8 +30,8 @@ type spoon_choice = Specific of card | Generic of CardType.t
 type play_spoon = game_status -> player_status -> spoon_choice option
 (** Choose if you want to play your [Spoon] card. [None] means you don't want to play your [card]. *)
 
-type choose_card_from_deck = game_status -> player_status -> card
-(** When playing the [Menu] card, choose which card you want to take from the [deck]. *)
+type choose_card_from_deck = game_status -> player -> options:card list -> card
+(** When playing the [Menu] card, choose which card you want to take from the deck. *)
 
 type choose_card_to_copy = game_status -> player_status -> card
 (** When playing the [SpecialOrder] card, choose which card you want to copy. *)
@@ -39,7 +39,7 @@ type choose_card_to_copy = game_status -> player_status -> card
 type choose_cards_to_flip = game_status -> player_status -> card list
 (** When playing the [TakeOutBox] card, choose which cards you want to put face down. *)
 
-type choose_card_to_give = game_status -> player_status -> card
+type choose_card_to_give = game_status -> player -> options:card list -> card
 (** When someone plays the [Spoon] card, choose which card you want to give them.
     This is only called if you have to make a choice, for example if someone asks for a [Maki 3] card, 
     you have no choice, so this function is not called. But if someone asks for a [Maki] card, then you have a choice,

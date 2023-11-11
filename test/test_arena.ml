@@ -9,7 +9,7 @@ let first_pick_strategy =
     play_chopsticks = (fun _ _ -> None);
     play_spoon = (fun _ _ -> None);
     choose_card_from_deck = (fun _ _ ~options -> List.hd options);
-    choose_card_to_copy = (fun _ player_status -> List.hd player_status.hand);
+    choose_card_to_copy = (fun _ player -> List.hd player.table);
     choose_cards_to_flip = (fun _ _ -> []);
     choose_card_to_give = (fun _ _ ~options -> List.hd options);
   }

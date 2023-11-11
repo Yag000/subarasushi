@@ -1,5 +1,6 @@
 type player = {
   name : string;
+  id : int;
   score : int;
   desserts : Cards.dessert list;
   table : Cards.hand;

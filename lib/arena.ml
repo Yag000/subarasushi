@@ -97,8 +97,11 @@ let[@warning "-32"] game_status_of_internal_game_status internal_game_status =
     @raise Invalid_argument if there are not enough or too many players. *)
 let initial_game_status (game_settings : game_settings) : internal_game_status =
   let players =
-    List.map
-      (fun (strategy, name) -> { player = default_named_player name; strategy })
+    List.mapi
+      (fun i (strategy, name) ->
+        let player = default_named_player name in
+        let player = { player with id = i } in
+        { player; strategy })
       game_settings.players
   in
   let menu = game_settings.menu in

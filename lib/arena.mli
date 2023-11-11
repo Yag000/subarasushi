@@ -33,10 +33,10 @@ type play_spoon = game_status -> player_status -> spoon_choice option
 type choose_card_from_deck = game_status -> player -> options:card list -> card
 (** When playing the [Menu] card, choose which card you want to take from the deck. *)
 
-type choose_card_to_copy = game_status -> player_status -> card
+type choose_card_to_copy = game_status -> player -> card
 (** When playing the [SpecialOrder] card, choose which card you want to copy. *)
 
-type choose_cards_to_flip = game_status -> player_status -> card list
+type choose_cards_to_flip = game_status -> player -> card list
 (** When playing the [TakeOutBox] card, choose which cards you want to put face down. *)
 
 type choose_card_to_give = game_status -> player -> options:card list -> card

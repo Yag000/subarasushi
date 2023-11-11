@@ -1,5 +1,6 @@
 open Cards
 open Player
+open Points
 
 type game_status = {
   players : player list;
@@ -60,17 +61,16 @@ type player_strategy = {
 type game_settings = { players : (player_strategy * string) list; menu : menu }
 (** Basic game settings. It contains the players (how they are called and their strategy) and the menu. *)
 
-type strategized_player = {
-  player : player;
-  strategy : player_strategy; [@warning "-69"]
-}
+type strategized_player = { player : player; strategy : player_strategy }
 (** Player with a strategy. *)
 
 type internal_game_status = {
   players : strategized_player list;
-  played_uramakis : int; [@warning "-69"]
+  played_uramakis : int;
+  total_special_order_copying_desserts : int;
   current_round : int;
   current_turn : int;
+  deck : deck;
   menu : menu;
 }
 (** Current game status. This contains the details needed to
@@ -106,12 +106,28 @@ let initial_game_status (game_settings : game_settings) : internal_game_status =
   else if List.length players > 8 then
     raise (Invalid_argument "Too many players")
   else
-    { players; played_uramakis = 0; current_round = 1; current_turn = 1; menu }
+    {
+      players;
+      played_uramakis = 0;
+      total_special_order_copying_desserts = 0;
+      current_round = 1;
+      current_turn = 1;
+      menu;
+      deck = create_deck menu;
+    }
+
+(** Advance one turn. Nothing needs to be reset *)
+let advance_one_turn (internal_game_status : internal_game_status) :
+    internal_game_status =
+  {
+    internal_game_status with
+    current_turn = internal_game_status.current_turn + 1;
+  }
 
 (** Play a turn of Sushi Go Party. *)
-let[@warning "-32"] play_turn (_internal_game_status : internal_game_status) :
+let play_turn (internal_game_status : internal_game_status) :
     internal_game_status =
-  failwith "TODO"
+  internal_game_status |> advance_one_turn
 
 (** Advance one round. They current turn is reset to 1. *)
 let advance_one_round (internal_game_status : internal_game_status) :
@@ -120,12 +136,88 @@ let advance_one_round (internal_game_status : internal_game_status) :
     internal_game_status with
     current_round = internal_game_status.current_round + 1;
     current_turn = 1;
+    played_uramakis = 0;
+    deck =
+      create_deck_keeping_desserts internal_game_status.deck
+        internal_game_status.menu;
+  }
+
+(** Split [strategized_player list] into ([player list], [player_strategy list]) *)
+let extract_strategized_players (players : strategized_player list) =
+  List.fold_left
+    (fun (p, s) sp -> (sp.player :: p, sp.strategy :: s))
+    ([], []) players
+
+(** Forms [strategized_player list] from [player list] and [player_strategy list] 
+    @raise an Invalid_argument when list have not the same length.
+    *)
+let zip_to_strategized_players (players : player list)
+    (player_strategies : player_strategy list) =
+  let rec zip zipped p s =
+    match (p, s) with
+    | [], [] -> zipped
+    | p :: ps, s :: ss -> zip ({ player = p; strategy = s } :: zipped) ps ss
+    | _ -> raise (Invalid_argument "Each player should have a strategy")
+  in
+  zip [] players player_strategies
+
+(** Compute points for each [player] by 
+   * Extracting players from [internal_game_status]
+   * Updating scores
+   * Zipping players with strategies 
+ *)
+let compute_points_round (internal_game_status : internal_game_status) :
+    internal_game_status =
+  let players, strategies =
+    internal_game_status.players |> extract_strategized_players
+  in
+  let players =
+    count_round_points ~played_uramakis:internal_game_status.played_uramakis
+      players
+  in
+  {
+    internal_game_status with
+    players = zip_to_strategized_players players strategies;
+  }
+
+(** Deal cards at the start of a round *)
+let deal_cards_at_start (internal_game_status : internal_game_status) =
+  let players, strategies =
+    internal_game_status.players |> extract_strategized_players
+  in
+  let deck_to_deal =
+    remove_n_cards_of_type internal_game_status.deck
+      ~to_remove:internal_game_status.total_special_order_copying_desserts
+      (Special SpecialOrder)
+  in
+  let hands, deck =
+    deal_cards deck_to_deal
+      ~nb_players:(List.length internal_game_status.players)
+      ~round:internal_game_status.current_round
+  in
+  let players =
+    List.map2 (fun player hand -> { player with table = hand }) players hands
+  in
+  {
+    internal_game_status with
+    players = zip_to_strategized_players players strategies;
+    deck;
   }
 
 (** Play a round of Sushi Go Party. *)
 let play_round (internal_game_status : internal_game_status) :
     internal_game_status =
-  advance_one_round internal_game_status
+  let number_of_turns =
+    number_of_cards_to_deal
+      ~nb_players:(List.length internal_game_status.players)
+  in
+  let rec round_loop (internal_game_status : internal_game_status) =
+    if internal_game_status.current_turn > number_of_turns then
+      internal_game_status
+    else internal_game_status |> play_turn |> round_loop
+  in
+  deal_cards_at_start internal_game_status
+  |> round_loop |> compute_points_round |> advance_one_round
 
 (** From a  given [game_settings], this function plays a game of Sushi Go Party. *)
 let arena (game_settings : game_settings) =

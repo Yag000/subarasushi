@@ -168,6 +168,17 @@ let create_deck menu =
     in
     (deck_template, d)
 
+(** Filter all the desserts in a [deck] *)
+let filter_desserts (deck, dessert_type) =
+  ( List.filter
+      (fun card -> match card with Dessert _ -> true | _ -> false)
+      deck,
+    dessert_type )
+
+let create_deck_keeping_desserts (deck : deck) (menu : menu) : deck =
+  let complete_deck, dessert_type = create_deck menu in
+  (complete_deck @ (filter_desserts deck |> fst), dessert_type)
+
 (** Associate a random bits to every element of the list, than sort it by the bits, and remove them *)
 let shuffle_cards cards =
   let nd = List.map (fun c -> (Random.bits (), c)) cards in
@@ -197,10 +208,13 @@ let get_n_cards cards n =
   in
   gnc cards [] n
 
+(** Return the number of cards to deal per player for each round *)
+let number_of_cards_to_deal ~nb_players = 11 - (nb_players / 2)
+
 (** [deal_cards] : Deal a certain amount of cards based on the number of players and the round they are in. Returns all hands and a deck of undistributed cards *)
 let deal_cards deck ~nb_players ~round =
   let _, dessert = deck in
-  let total_of_card_per_player = 11 - (nb_players / 2) in
+  let total_of_card_per_player = number_of_cards_to_deal ~nb_players in
   let cards = add_desserts_to_deck deck nb_players round |> shuffle_cards in
   let hands, deck =
     List.fold_left
@@ -266,3 +280,16 @@ module CardType = struct
     | Dessert Pudding -> Pudding
     | FaceDown card -> card_type_of_card card
 end
+
+(** Remove from a [deck] the n firsts cards with type matching the card passed in argument *)
+let remove_n_cards_of_type (cards, dessert) ~to_remove card =
+  if to_remove = 0 then (cards, dessert)
+  else
+    ( List.fold_left
+        (fun (n, acc) c ->
+          if CardType.card_type_of_card c = CardType.card_type_of_card card then
+            (n - 1, acc)
+          else (n, c :: acc))
+        (to_remove, []) cards
+      |> snd,
+      dessert )

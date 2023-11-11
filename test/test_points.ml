@@ -7,7 +7,9 @@ let points_from_players = List.map (fun p -> p.score)
 let compute_round_points_with_uramaki played_uramakis hands =
   let players =
     List.map
-      (fun cards -> { name = "test"; table = cards; score = 0; desserts = [] })
+      (fun cards ->
+        let player = default_named_player "test" in
+        { player with table = cards })
       hands
   in
   count_round_points ~played_uramakis players |> points_from_players
@@ -24,7 +26,8 @@ let run_round_test_case (name, expected_points, hands) =
 
 let players_from_desserts =
   List.map (fun cards ->
-      { name = "test"; table = []; score = 0; desserts = cards })
+      let player = default_named_player "test" in
+      { player with desserts = cards })
 
 let compute_desserts_points desserts =
   desserts |> players_from_desserts |> count_dessert_points

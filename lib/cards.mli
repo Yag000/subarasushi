@@ -91,11 +91,19 @@ val create_deck : menu -> deck
 (** [create_deck] : create a [deck] based on a certain [menu]. 
     Some categories of cards appear more often than others. *)
 
+val create_deck_keeping_desserts : deck -> menu -> deck
+
 val shuffle_cards : card list -> card list
 (** [shuffle_cards] : shuffle a [card list] *)
 
+val number_of_cards_to_deal : nb_players:int -> int
+(** Return the number of cards to deal per player for each round *)
+
 val deal_cards : deck -> nb_players:int -> round:int -> hand list * deck
 (** [deal_cards] : from a [deck], the number of players, and the current round, distribute cards to each player and an undistributed [deck] of cards. *)
+
+val remove_n_cards_of_type : deck -> to_remove:int -> card -> deck
+(** Remove from a [deck] the n firsts cards with type matching the [card] passed in argument *)
 
 (** Using a module to avoid conflicts with the [card] type. *)
 module CardType : sig

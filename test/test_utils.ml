@@ -11,6 +11,21 @@ let partition_list_preserves_elements =
       let l' = List.flatten p_l in
       List.for_all (fun x -> List.mem x l') l)
 
+let random_element_is_always_inside_list =
+  let open QCheck in
+  Test.make ~count:100 ~name:"for all l, for all x in l, x in random_element l"
+    (list small_int) (fun l ->
+      let x = list_random_element_opt l in
+      match x with None -> l = [] | Some x -> List.mem x l)
+
+let random_sublist_is_included_in_list =
+  let open QCheck in
+  Test.make ~count:100
+    ~name:"for all l, for all x in list_random_elements l, x in l"
+    (list small_int) (fun l ->
+      let x = list_random_elements l in
+      List.for_all (fun x -> List.mem x l) x)
+
 let () =
   let open Alcotest in
   run "Utils"
@@ -58,9 +73,8 @@ let () =
                 "l1"
                 [ [ 1; 1; 3; 3; 5; 5 ]; [ 2; 2; 4; 4 ] ]
                 p_l);
+          QCheck_alcotest.to_alcotest partition_list_preserves_elements;
         ] );
-      ( "Partition list preserves elements",
-        [ QCheck_alcotest.to_alcotest partition_list_preserves_elements ] );
       ( "list_remove_index",
         [
           test_case "empty_list" `Quick (fun () ->
@@ -87,5 +101,21 @@ let () =
               let l : int list = [ 1; 2; 3; 4; 5 ] in
               let l' = list_remove_index 10 l in
               check (list int) "l1" [ 1; 2; 3; 4; 5 ] l');
+        ] );
+      ( "list_random_element_opt",
+        [
+          test_case "empty_list" `Quick (fun () ->
+              let l : int list = [] in
+              let l' = list_random_element_opt l in
+              check (option int) "l1" None l');
+          QCheck_alcotest.to_alcotest random_element_is_always_inside_list;
+        ] );
+      ( "list_random_elements",
+        [
+          test_case "empty_list" `Quick (fun () ->
+              let l : int list = [] in
+              let l' = list_random_elements l in
+              check (list int) "l1" [] l');
+          QCheck_alcotest.to_alcotest random_sublist_is_included_in_list;
         ] );
     ]

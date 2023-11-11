@@ -79,6 +79,8 @@ There exists a set of default menus that are available to the player. The player
 val menu_of_default_menu : default_menu -> menu
 (** Initializes a [menu] from a [default_menu]. *)
 
+val pp_menu : Format.formatter -> menu -> unit
+
 type deck
 (** This type represents the complete game [deck] *)
 

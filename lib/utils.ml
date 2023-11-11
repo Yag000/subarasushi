@@ -12,3 +12,25 @@ let partition_list partition_function l =
 
 (** Removes the element at the given index from the list. *)
 let list_remove_index index l = List.filteri (fun i _ -> i <> index) l
+
+(** Returns a random element from the list. *)
+let list_random_element_opt l =
+  match l with [] -> None | _ -> Random.int (List.length l) |> List.nth_opt l
+
+let choose_aux l =
+  let index = List.length l |> Random.int in
+  (List.nth l index, index)
+
+(** Returns a random set of random size of elements from the list . *)
+let list_random_elements l =
+  let len = List.length l in
+  if len = 0 then []
+  else
+    let n = Random.int len in
+    List.init n (fun _ -> ())
+    |> List.fold_left
+         (fun (result, l) _ ->
+           let e, i = choose_aux l in
+           (e :: result, list_remove_index i l))
+         ([], l)
+    |> fst

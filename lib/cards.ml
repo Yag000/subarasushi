@@ -49,6 +49,7 @@ type default_menu =
 
 type menu =
   sushi_roll * appetizer * appetizer * appetizer * special * special * dessert
+[@@deriving show]
 
 let menu_of_default_menu = function
   | MyFirstMeal ->

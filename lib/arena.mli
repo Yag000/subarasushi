@@ -57,8 +57,28 @@ type player_strategy = {
 }
 (** Player strategy. *)
 
+(** Win. It can be a single player or a draw between multiple players. *)
+type win =
+  | Single of player  (** Single player win *)
+  | Draw of player list  (** Draw between multiple players *)
+
+val equal_win : win -> win -> bool
+(** Equality function for [win]. *)
+
+val pp_win : Format.formatter -> win -> unit
+(** Pretty print function for [win]. *)
+
+type game_ending = {
+  winners : win;  (** Winner/s. *)
+  players : player list;  (** List of players sorted by score. *)
+}
+(** Game ending. It contains the winners and the players sorted by score. *)
+
+val game_ending_of_player_list : player list -> game_ending
+(** Create a game ending from a list of players. *)
+
 type game_settings = { players : (player_strategy * string) list; menu : menu }
 (** Basic game settings. It contains the players (how they are called and their strategy) and the menu. *)
 
-val arena : game_settings -> unit
+val arena : game_settings -> game_ending
 (** Start a game with the given settings. *)

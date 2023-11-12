@@ -17,8 +17,7 @@ let test_random_player_strategy =
        style"
     (pair (int_range 2 8) arbitrary_menu)
     (fun (n, menu) ->
-      let game = init_game n random_player menu in
-      arena game;
+      let _ = init_game n random_player menu |> arena in
       true)
 
 let () =

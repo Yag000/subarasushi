@@ -75,7 +75,7 @@ let menu_of_default_menu = function
       (Uramaki 0, Onigiri Circle, Tofu, MisoSoup, Menu 0, SpecialOrder, Fruit [])
 
 type deck = card list * dessert [@@deriving show, eq]
-type hand = card list [@@deriving show]
+type hand = card list [@@deriving show, eq]
 
 (** Check that all [appetizer]s and [special]s are different from each other *)
 let is_well_built (_, app1, app2, app3, spec1, spec2, _) =

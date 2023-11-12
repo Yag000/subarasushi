@@ -6,6 +6,7 @@ type player = {
   table : Cards.hand;
 }
 
+val equal_player : player -> player -> bool
 val pp_player : Format.formatter -> player -> unit
 
 val default_named_player : string -> player

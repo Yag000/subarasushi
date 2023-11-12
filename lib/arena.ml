@@ -58,6 +58,18 @@ type player_strategy = {
 }
 (** Player strategy. *)
 
+(** Win. It can be a single player or a draw between multiple players. *)
+type win =
+  | Single of player  (** Single player win *)
+  | Draw of player list  (** Draw between multiple players *)
+[@@deriving eq, show]
+
+type game_ending = {
+  winners : win;  (** Winner/s. *)
+  players : player list;  (** List of players sorted by score. *)
+}
+(** Game ending. It contains the winners and the players sorted by score. *)
+
 type game_settings = { players : (player_strategy * string) list; menu : menu }
 (** Basic game settings. It contains the players (how they are called and their strategy) and the menu. *)
 
@@ -222,6 +234,23 @@ let play_round (internal_game_status : internal_game_status) :
   deal_cards_at_start internal_game_status
   |> round_loop |> compute_points_round |> advance_one_round
 
+(** Compares the scores of two players. If they have the same score, we compare the number of desserts they have. *)
+let compare_players_score p1 p2 =
+  match compare p2.score p1.score with
+  | 0 -> compare (List.length p2.desserts) (List.length p1.desserts)
+  | x -> x
+
+(** Computes the points for each player and returns a [game_ending] with the winners and the players sorted by score. *)
+
+let game_ending_of_player_list players =
+  let players = List.sort compare_players_score players in
+  let first_player = List.hd players in
+  let winners = List.filter (fun p -> compare p first_player = 0) players in
+  let win =
+    if List.length winners = 1 then Single (List.hd winners) else Draw winners
+  in
+  { winners = win; players }
+
 (** From a  given [game_settings], this function plays a game of Sushi Go Party. *)
 let arena (game_settings : game_settings) =
   let internal_game_status = initial_game_status game_settings in
@@ -231,5 +260,7 @@ let arena (game_settings : game_settings) =
       let internal_game_status = play_round internal_game_status in
       loop internal_game_status
   in
-  let _post_rounds_internal_game_status = loop internal_game_status in
-  ()
+  let post_rounds_internal_game_status = loop internal_game_status in
+  post_rounds_internal_game_status.players
+  |> List.map (fun { player; _ } -> player)
+  |> count_dessert_points |> game_ending_of_player_list

@@ -1,5 +1,6 @@
 open Subarasushi.Cards
 open Subarasushi.Player
+open Subarasushi.Arena
 open Subarasushi.Utils
 
 let deck =
@@ -174,3 +175,7 @@ let generator_player =
 
 let arbitrary_player =
   QCheck.make ~print:(Format.asprintf "%a" pp_player) generator_player
+
+let testable_win =
+  let open Alcotest in
+  testable (Fmt.of_to_string (Format.asprintf "%a" pp_win)) equal_win

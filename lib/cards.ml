@@ -75,7 +75,7 @@ let menu_of_default_menu = function
       (Uramaki 0, Onigiri Circle, Tofu, MisoSoup, Menu 0, SpecialOrder, Fruit [])
 
 type deck = card list * dessert [@@deriving show, eq]
-type hand = card list
+type hand = card list [@@deriving show]
 
 (** Check that all [appetizer]s and [special]s are different from each other *)
 let is_well_built (_, app1, app2, app3, spec1, spec2, _) =
@@ -181,9 +181,7 @@ let create_deck_keeping_desserts (deck : deck) (menu : menu) : deck =
   (complete_deck @ (filter_desserts deck |> fst), dessert_type)
 
 (** Associate a random bits to every element of the list, than sort it by the bits, and remove them *)
-let shuffle_cards cards =
-  let nd = List.map (fun c -> (Random.bits (), c)) cards in
-  List.sort compare nd |> List.map snd
+let shuffle_cards cards = Utils.list_shuffle cards
 
 let how_many_desserts nb_players round =
   if nb_players < 6 then

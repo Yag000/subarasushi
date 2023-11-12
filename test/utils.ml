@@ -1,4 +1,5 @@
 open Subarasushi.Cards
+open Subarasushi.Player
 open Subarasushi.Utils
 
 let deck =
@@ -87,6 +88,9 @@ let generator_dessert =
   let open QCheck in
   Gen.oneof [ Gen.return Pudding; Gen.return MatchaIceCream; generator_fruit ]
 
+let arbitrary_dessert =
+  QCheck.make ~print:(Format.asprintf "%a" pp_dessert) generator_dessert
+
 let generator_card =
   let open QCheck in
   Gen.oneof
@@ -150,3 +154,15 @@ let generator_menu : menu QCheck.Gen.t =
 
 let arbitrary_menu =
   QCheck.make ~print:(Format.asprintf "%a" pp_menu) generator_menu
+
+let generator_player =
+  let open QCheck in
+  Gen.map (fun (table, desserts) ->
+      let player = default_named_player "test" in
+      { player with table; desserts })
+  @@ Gen.pair
+       (Gen.list_size (Gen.int_range 0 10) generator_card)
+       (Gen.list_size (Gen.int_range 0 15) generator_dessert)
+
+let arbitrary_player =
+  QCheck.make ~print:(Format.asprintf "%a" pp_player) generator_player

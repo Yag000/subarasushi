@@ -5,6 +5,7 @@ type player = {
   desserts : Cards.dessert list;
   table : Cards.hand;
 }
+[@@deriving show]
 
 (** Returns a new player with the given name. Every other field is
     initialized to the default value. *)

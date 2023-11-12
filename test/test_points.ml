@@ -1,6 +1,8 @@
 open Subarasushi.Cards
 open Subarasushi.Points
 open Subarasushi.Player
+open Subarasushi.Utils
+open Utils
 
 let points_from_players = List.map (fun p -> p.score)
 
@@ -41,10 +43,84 @@ let run_dessert_test_case (name, expected_points, desserts) =
         "same result" expected_points
         (compute_desserts_points desserts))
 
+(** Remove all the cards that are not of the menu *)
+let filter_menu cards menu =
+  List.filter (fun c -> List.mem (CardType.card_type_of_card c) menu) cards
+
+let card_type_list_of_menu menu =
+  let s, a1, a2, a3, s1, s2, d = menu in
+  [
+    SushiRoll s;
+    Appetizer a1;
+    Appetizer a2;
+    Appetizer a3;
+    Special s1;
+    Special s2;
+    Dessert d;
+  ]
+  |> List.map CardType.card_type_of_card
+
+let test_round_symmetry =
+  let open QCheck in
+  Test.make ~count:1000 ~name:"Player points do not depend on order"
+    (triple
+       (list_of_size (Gen.int_range 2 8) arbitrary_player)
+       (int_range 0 6) arbitrary_menu)
+    (fun (players, played_uramakis, menu) ->
+      (* We only want to test the cards that are in the menu *)
+      let players =
+        List.map
+          (fun p ->
+            {
+              p with
+              table = card_type_list_of_menu menu |> filter_menu p.table;
+            })
+          players
+      in
+      let points =
+        count_round_points ~played_uramakis players |> points_from_players
+      in
+      let points' =
+        count_round_points ~played_uramakis (list_shuffle players)
+        |> points_from_players
+      in
+      List.sort compare points = List.sort compare points')
+
+(** Remove all the cards that are not of the same [CardType] as [dessert] *)
+let filter_desserts desserts dessert =
+  List.filter
+    (fun c ->
+      match (c, dessert) with
+      | Pudding, Pudding -> true
+      | MatchaIceCream, MatchaIceCream -> true
+      | Fruit _, Fruit _ -> true
+      | _ -> false)
+    desserts
+
+let test_dessert_symmetry =
+  let open QCheck in
+  Test.make ~count:1000 ~name:"Player points do not depend on order"
+    (pair (list_of_size (Gen.int_range 2 8) arbitrary_player) arbitrary_dessert)
+    (fun (players, dessert) ->
+      (* We only want to test the cards that are in the menu *)
+      let players =
+        List.map
+          (fun p -> { p with desserts = filter_desserts p.desserts dessert })
+          players
+      in
+      let points = count_dessert_points players |> points_from_players in
+      let points' =
+        count_dessert_points (list_shuffle players) |> points_from_players
+      in
+      List.sort compare points = List.sort compare points')
+
 let () =
   let open Alcotest in
   run "Points"
     [
+      ("Symmetry rounds", [ QCheck_alcotest.to_alcotest test_round_symmetry ]);
+      ( "Symmetry desserts",
+        [ QCheck_alcotest.to_alcotest test_dessert_symmetry ] );
       ( "Empty hands",
         [
           run_round_test_case ("Empty hands in the list", [ 0; 0 ], [ []; [] ]);
@@ -822,6 +898,14 @@ let () =
                   SushiRoll (Maki 1);
                 ];
               ] );
+        ] );
+      ( "Desserts do not break count_round_points",
+        [
+          run_round_test_case
+            ( "Desserts do not break count_round_points",
+              [ 0; 0; 0 ],
+              [ [ Dessert Pudding ]; [ Dessert Pudding ]; [ Dessert Pudding ] ]
+            );
         ] );
       ( "Mactha Ice Cream",
         [

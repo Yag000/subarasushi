@@ -89,6 +89,8 @@ val equal_deck : deck -> deck -> bool
 
 type hand = card list
 
+val pp_hand : Format.formatter -> hand -> unit
+
 val create_deck : menu -> deck
 (** [create_deck] : create a [deck] based on a certain [menu]. 
     Some categories of cards appear more often than others. *)

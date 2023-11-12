@@ -9,3 +9,6 @@ val list_random_element_opt : 'a list -> 'a option
 
 val list_random_elements : 'a list -> 'a list
 (** Returns a random set of random size of elements from the list . *)
+
+val list_shuffle : 'a list -> 'a list
+(** Shuffles the list. *)

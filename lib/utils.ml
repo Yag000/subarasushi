@@ -34,3 +34,8 @@ let list_random_elements l =
            (e :: result, list_remove_index i l))
          ([], l)
     |> fst
+
+(** Shuffles the list. *)
+let list_shuffle l =
+  let nd = List.map (fun c -> (Random.bits (), c)) l in
+  List.sort compare nd |> List.map snd

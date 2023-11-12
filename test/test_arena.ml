@@ -32,21 +32,18 @@ let are_players_sorted l =
   let rec is_sorted l =
     match l with
     | [] | [ _ ] -> true
-    | h1 :: h2 :: t -> h1.score >= h2.score && is_sorted (h2 :: t)
+    | (_, score1) :: (name2, score2) :: t ->
+        score1 >= score2 && is_sorted ((name2, score2) :: t)
   in
   is_sorted l
 
-let get_winner_points = function Single x -> x | Draw l -> List.hd l
+let get_winner = function Single x -> x | Draw l -> List.hd l
 
-let winners_have_same_points_and_desserts = function
+let winners_have_same_points = function
   | Single _ -> true
   | Draw l ->
-      let first_player = List.hd l in
-      List.for_all
-        (fun x ->
-          x.score = first_player.score
-          && List.length x.desserts = List.length first_player.desserts)
-        l
+      let _, first_player_score = List.hd l in
+      List.for_all (fun (_, score) -> score = first_player_score) l
 
 let win_data_is_accurate =
   let open QCheck in
@@ -62,10 +59,12 @@ let win_data_is_accurate =
         }
       in
       let game_ending = arena game_settings in
-      let winner_points = get_winner_points game_ending.winners in
+      let winner_points = get_winner game_ending.winners |> snd in
       are_players_sorted game_ending.players
-      && winner_points.score = (List.hd game_ending.players |> fun x -> x.score)
-      && winners_have_same_points_and_desserts game_ending.winners)
+      && winner_points = (List.hd game_ending.players |> snd)
+      && winners_have_same_points game_ending.winners)
+
+let decompose_player player = (player.name, player.score)
 
 let () =
   let open Alcotest in
@@ -102,7 +101,7 @@ let () =
                     let player = default_named_player "tst" in
                     { player with score = 10; desserts = [] })
               in
-              let expected = Draw players in
+              let expected = Draw (List.map decompose_player players) in
               let actual = game_ending_of_player_list players in
               Alcotest.(check testable_win) "same" expected actual.winners);
           test_case "3 player draw in points but two have more desserts" `Quick
@@ -116,7 +115,11 @@ let () =
                       desserts = (if i = 2 then [] else [ Pudding ]);
                     })
               in
-              let expected = Draw [ List.nth players 0; List.nth players 1 ] in
+              let expected =
+                Draw
+                  ([ List.nth players 0; List.nth players 1 ]
+                  |> List.map decompose_player)
+              in
               let actual = game_ending_of_player_list players in
               Alcotest.(check testable_win) "same" expected actual.winners);
           test_case "3 player draw in points but one has more desserts" `Quick
@@ -130,7 +133,7 @@ let () =
                       desserts = (if i = 2 then [ Pudding ] else []);
                     })
               in
-              let expected = Single (List.nth players 2) in
+              let expected = Single (decompose_player (List.nth players 2)) in
               let actual = game_ending_of_player_list players in
               Alcotest.(check testable_win) "same" expected actual.winners);
           test_case "1 winner in points but wih less desserts" `Quick (fun () ->
@@ -143,7 +146,7 @@ let () =
                       desserts = (if i = 2 then [] else [ Pudding ]);
                     })
               in
-              let expected = Single (List.nth players 2) in
+              let expected = Single (decompose_player (List.nth players 2)) in
               let actual = game_ending_of_player_list players in
               Alcotest.(check testable_win) "same" expected actual.winners);
         ] );

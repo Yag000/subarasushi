@@ -89,6 +89,7 @@ val equal_deck : deck -> deck -> bool
 
 type hand = card list
 
+val equal_hand : hand -> hand -> bool
 val pp_hand : Format.formatter -> hand -> unit
 
 val create_deck : menu -> deck

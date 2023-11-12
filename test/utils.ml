@@ -110,7 +110,8 @@ let arbitrary_card =
     exception. 
     @raise Invalid_argument if [l] has less than [n] different elements
 *)
-let get_n_different_elements n l =
+let get_n_different_elements n l seed =
+  Random.init seed;
   List.init n (fun _ -> ())
   |> List.fold_left
        (fun (acc, l) _ ->
@@ -121,13 +122,14 @@ let get_n_different_elements n l =
        ([], l)
   |> fst
 
-let get_three_different_appetizers =
+let get_three_different_appetizers seed =
   get_n_different_elements 3
     [
       Dumpling; Edamame; Eel; MisoSoup; Sashimi; Tempura; Tofu; Onigiri Triangle;
     ]
+    seed
 
-let get_two_different_specials =
+let get_two_different_specials seed =
   get_n_different_elements 2
     [
       Chopsticks 0;
@@ -139,18 +141,24 @@ let get_two_different_specials =
       Tea;
       Wasabi None;
     ]
+    seed
 
 let generator_menu : menu QCheck.Gen.t =
   let open QCheck in
-  let appetizers = get_three_different_appetizers in
-  let specials = get_two_different_specials in
-  Gen.tup7 generator_sushi_roll
-    (List.nth appetizers 0 |> Gen.return)
-    (List.nth appetizers 1 |> Gen.return)
-    (List.nth appetizers 2 |> Gen.return)
-    (List.nth specials 0 |> Gen.return)
-    (List.nth specials 1 |> Gen.return)
-    generator_dessert
+  let appetizers_gen =
+    Gen.map (fun x -> get_three_different_appetizers x) Gen.int
+  in
+  let specials_gen = Gen.map (fun x -> get_two_different_specials x) Gen.int in
+  Gen.map
+    (fun (sushi_roll, appetizers, specials, dessert) ->
+      ( sushi_roll,
+        List.nth appetizers 0,
+        List.nth appetizers 1,
+        List.nth appetizers 2,
+        List.nth specials 0,
+        List.nth specials 1,
+        dessert ))
+    (Gen.tup4 generator_sushi_roll appetizers_gen specials_gen generator_dessert)
 
 let arbitrary_menu =
   QCheck.make ~print:(Format.asprintf "%a" pp_menu) generator_menu

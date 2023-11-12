@@ -22,6 +22,7 @@ let test_random_player_strategy =
       true)
 
 let () =
+  Random.self_init ();
   let open Alcotest in
   run "Strategies"
     [

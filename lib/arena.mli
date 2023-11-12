@@ -59,8 +59,8 @@ type player_strategy = {
 
 (** Win. It can be a single player or a draw between multiple players. *)
 type win =
-  | Single of player  (** Single player win *)
-  | Draw of player list  (** Draw between multiple players *)
+  | Single of (string * int)  (** Single player win *)
+  | Draw of (string * int) list  (** Draw between multiple players *)
 
 val equal_win : win -> win -> bool
 (** Equality function for [win]. *)
@@ -70,7 +70,7 @@ val pp_win : Format.formatter -> win -> unit
 
 type game_ending = {
   winners : win;  (** Winner/s. *)
-  players : player list;  (** List of players sorted by score. *)
+  players : (string * int) list;  (** List of players sorted by score. *)
 }
 (** Game ending. It contains the winners and the players sorted by score. *)
 

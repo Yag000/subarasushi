@@ -60,13 +60,13 @@ type player_strategy = {
 
 (** Win. It can be a single player or a draw between multiple players. *)
 type win =
-  | Single of player  (** Single player win *)
-  | Draw of player list  (** Draw between multiple players *)
+  | Single of (string * int)  (** Single player win *)
+  | Draw of (string * int) list  (** Draw between multiple players *)
 [@@deriving eq, show]
 
 type game_ending = {
   winners : win;  (** Winner/s. *)
-  players : player list;  (** List of players sorted by score. *)
+  players : (string * int) list;  (** List of players sorted by score. *)
 }
 (** Game ending. It contains the winners and the players sorted by score. *)
 
@@ -240,12 +240,17 @@ let compare_players_score p1 p2 =
   | 0 -> compare (List.length p2.desserts) (List.length p1.desserts)
   | x -> x
 
-(** Computes the points for each player and returns a [game_ending] with the winners and the players sorted by score. *)
+let decompose_player player = (player.name, player.score)
 
+(** Computes the points for each player and returns a [game_ending] with the winners and the players sorted by score. *)
 let game_ending_of_player_list players =
   let players = List.sort compare_players_score players in
   let first_player = List.hd players in
-  let winners = List.filter (fun p -> compare p first_player = 0) players in
+  let winners =
+    List.filter (fun p -> compare p first_player = 0) players
+    |> List.map decompose_player
+  in
+  let players = List.map decompose_player players in
   let win =
     if List.length winners = 1 then Single (List.hd winners) else Draw winners
   in

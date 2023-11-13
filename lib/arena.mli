@@ -65,9 +65,6 @@ type win =
 val equal_win : win -> win -> bool
 (** Equality function for [win]. *)
 
-val pp_win : Format.formatter -> win -> unit
-(** Pretty print function for [win]. *)
-
 type game_ending = {
   winners : win;  (** Winner/s. *)
   players : (string * int) list;  (** List of players sorted by score. *)

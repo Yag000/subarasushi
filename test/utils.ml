@@ -2,6 +2,7 @@ open Subarasushi.Cards
 open Subarasushi.Player
 open Subarasushi.Arena
 open Subarasushi.Utils
+open Subarasushi.Display
 
 let deck =
   Alcotest.testable (Fmt.of_to_string (Format.asprintf "%a" pp_deck)) equal_deck

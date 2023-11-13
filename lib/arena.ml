@@ -62,7 +62,7 @@ type player_strategy = {
 type win =
   | Single of (string * int)  (** Single player win *)
   | Draw of (string * int) list  (** Draw between multiple players *)
-[@@deriving eq, show]
+[@@deriving eq]
 
 type game_ending = {
   winners : win;  (** Winner/s. *)

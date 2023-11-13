@@ -1,3 +1,9 @@
 (tests
- (names test_points test_utils test_arena test_cards test_strategies)
+ (names
+  test_points
+  test_utils
+  test_arena
+  test_cards
+  test_strategies
+  test_display)
  (libraries subarasushi alcotest qcheck qcheck-alcotest))

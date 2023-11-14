@@ -250,11 +250,10 @@ let game_ending_of_player_list players =
     List.filter (fun p -> compare p first_player = 0) players
     |> List.map decompose_player
   in
-  let players = List.map decompose_player players in
   let win =
     if List.length winners = 1 then Single (List.hd winners) else Draw winners
   in
-  { winners = win; players }
+  { winners = win; players = List.map decompose_player players }
 
 (** From a  given [game_settings], this function plays a game of Sushi Go Party. *)
 let arena (game_settings : game_settings) =

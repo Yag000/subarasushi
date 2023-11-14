@@ -10,7 +10,16 @@ This project uses [dune](https://dune.build/). To compile the project, run the f
 dune build
 ```
 
-As an API, this code is not meant to be run as an executable.
+## How to run the game
+
+You can run the game with the following command:
+
+```bash
+dune exec subarasushi
+```
+
+This will execute a terminal version of the game. You will be able to configure the
+game settings (player number, number of bots and menu to play with) and play the game.
 
 ## How to contribute
 

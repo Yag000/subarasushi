@@ -168,6 +168,12 @@ let create_deck menu =
     in
     (deck_template, d)
 
+(** Transform a [deck] in a ([card] list * [dessert]) 
+    Used for testing *)
+let deck_deconstruct deck =
+  let card_list, dess = deck in
+  (card_list, dess)
+
 (** Filter all the desserts in a [deck] *)
 let filter_desserts (deck, dessert_type) =
   ( List.filter
@@ -250,6 +256,7 @@ module CardType = struct
     | MatchaIceCream
     | Fruit
     | Pudding
+  [@@deriving show, eq]
 
   (** [card_type_of_card card] is the type of [card]. *)
   let rec card_type_of_card : card -> t = function

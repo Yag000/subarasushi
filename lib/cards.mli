@@ -85,6 +85,10 @@ val create_deck : menu -> deck
 (** [create_deck] : create a [deck] based on a certain [menu]. 
     Some categories of cards appear more often than others. *)
 
+val deck_deconstruct : deck -> card list * dessert
+(** Transform a [deck] in a ([card] list * [dessert]) 
+    Used for testing *)
+
 val create_deck_keeping_desserts : deck -> menu -> deck
 
 val shuffle_cards : card list -> card list
@@ -125,6 +129,9 @@ module CardType : sig
     | MatchaIceCream
     | Fruit
     | Pudding
+
+  val equal : t -> t -> bool
+  val pp : Format.formatter -> t -> unit
 
   val card_type_of_card : card -> t
   (** [card_type_of_card card] is the type of [card]. *)

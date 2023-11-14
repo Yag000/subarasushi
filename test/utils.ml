@@ -3,9 +3,70 @@ open Subarasushi.Player
 open Subarasushi.Arena
 open Subarasushi.Utils
 open Subarasushi.Display
+open Alcotest
 
-let deck =
-  Alcotest.testable (Fmt.of_to_string (Format.asprintf "%a" pp_deck)) equal_deck
+let card_testable =
+  testable (Fmt.of_to_string (Format.asprintf "%a" pp_card)) equal_card
+
+let card_type_testable =
+  testable (Fmt.of_to_string (Format.asprintf "%a" CardType.pp)) CardType.equal
+
+let sushi_roll_testable =
+  testable
+    (Fmt.of_to_string (Format.asprintf "%a" pp_sushi_roll))
+    equal_sushi_roll
+
+let appetizer_testable =
+  testable
+    (Fmt.of_to_string (Format.asprintf "%a" pp_appetizer))
+    equal_appetizer
+
+let special_testable =
+  testable (Fmt.of_to_string (Format.asprintf "%a" pp_special)) equal_special
+
+let dessert_testable =
+  testable (Fmt.of_to_string (Format.asprintf "%a" pp_dessert)) equal_dessert
+
+let list_card_testable = list card_testable
+
+let menu_deconstructed_testable =
+  pair sushi_roll_testable
+    (pair (list appetizer_testable)
+       (pair (list special_testable) dessert_testable))
+
+let deck_testable =
+  testable (Fmt.of_to_string (Format.asprintf "%a" pp_deck)) equal_deck
+
+let hand_testable =
+  testable (Fmt.of_to_string (Format.asprintf "%a" pp_hand)) equal_hand
+
+let deck_deconstructed_testable = pair list_card_testable dessert_testable
+let repartition_testable = pair (list hand_testable) deck_testable
+let deck_MyFirstMeal = create_deck (menu_of_default_menu MyFirstMeal)
+let deck_SushiGo = create_deck (menu_of_default_menu SushiGo)
+let deck_PartySampler = create_deck (menu_of_default_menu PartySampler)
+let deck_MasterMenu = create_deck (menu_of_default_menu MasterMenu)
+let deck_PointsPlatter = create_deck (menu_of_default_menu PointsPlatter)
+let deck_CutthroatCombo = create_deck (menu_of_default_menu CutthroatCombo)
+let deck_BigBanquet = create_deck (menu_of_default_menu BigBanquet)
+let deck_DinnerForTwo = create_deck (menu_of_default_menu DinnerForTwo)
+
+let menu_deconstruct (sr, app1, app2, app3, sp1, sp2, dess) =
+  (sr, ([ app1; app2; app3 ], ([ sp1; sp2 ], dess)))
+
+let custom_menu_example = (Maki 0, Eel, Tofu, Sashimi, Spoon 0, Tea, Pudding)
+
+let rec equal eq l1 l2 =
+  match (l1, l2) with
+  | [], [] -> true
+  | [], _ :: _ | _ :: _, [] -> false
+  | a1 :: l1, a2 :: l2 -> eq a1 a2 && equal eq l1 l2
+
+let contain_same_elements l1 l2 =
+  let foo x y =
+    match (x, y) with a, b when a > b -> 1 | a, b when a < b -> -1 | _ -> 0
+  in
+  equal ( = ) (List.fast_sort foo l1) (List.fast_sort foo l2)
 
 let generator_nigiri =
   let open QCheck in

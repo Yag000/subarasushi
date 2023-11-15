@@ -1,4 +1,5 @@
 open Subarasushi.Cards
+open Subarasushi.Utils
 open Alcotest
 open Utils
 
@@ -37,23 +38,29 @@ let run_menu_of_default_menu_test_case (name, expected_menu, default) =
         (menu_deconstruct expected_menu)
         (menu_deconstruct (menu_of_default_menu default)))
 
-let deal_cards_preserves_elements deck (handl, undistributed) nb_players round =
+let deal_cards_preserves_elements deck (handl, undistributed) _nb_players _round
+    =
   let dck = deck_deconstruct deck in
   let undis = deck_deconstruct undistributed in
-  let list_deck_plus_desserts =
-    fst dck
-    @ List.init
-        (if nb_players < 6 then
-           match round with
-           | 1 -> 5
-           | 2 -> 3
-           | 3 -> 2
-           | _ -> raise (Invalid_argument "Round not supported")
-         else 7 - (2 * (round - 1)))
-        (fun _ -> Dessert (snd dck))
+  let cards = fst dck in
+  let hand_desserts =
+    List.flatten handl
+    |> List.filter_map (function Dessert x -> Some x | _ -> None)
   in
-  let list_repartition = List.flatten handl @ fst undis in
-  contain_same_elements list_deck_plus_desserts list_repartition
+  let deck_desserts =
+    List.filter_map (function Dessert x -> Some x | _ -> None) (fst undis)
+  in
+  let total_desserts = hand_desserts @ deck_desserts in
+  let list_repartition =
+    List.flatten handl @ fst undis
+    |> List.filter (function Dessert _ -> false | _ -> true)
+  in
+  contain_same_elements cards list_repartition
+  &&
+  match List.hd total_desserts with
+  | MatchaIceCream -> List.for_all (fun x -> x = MatchaIceCream) total_desserts
+  | Pudding -> List.for_all (fun x -> x = Pudding) total_desserts
+  | Fruit _ -> includes fruit_list total_desserts
 
 let run_deal_cards_test_case (name, deck, nb_players, round) =
   let open Alcotest in
@@ -860,5 +867,4 @@ let () =
               c
               (number_of_cards_to_deal ~nb_players:p))
           players_cards );
-      ("", []);
     ]

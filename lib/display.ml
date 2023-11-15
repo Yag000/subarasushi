@@ -108,11 +108,9 @@ let pp_player ff (player : player) =
   pp_titled_card_list "Table" ff player.table
 
 let pp_menu ff (sr, app1, app2, app3, sp1, sp2, dess) =
+  Format.fprintf ff "Menu : [Nigiri; ";
   let l =
     [
-      Nigiri Egg;
-      Nigiri Salmon;
-      Nigiri Squid;
       SushiRoll sr;
       Appetizer app1;
       Appetizer app2;
@@ -122,7 +120,9 @@ let pp_menu ff (sr, app1, app2, app3, sp1, sp2, dess) =
       Dessert dess;
     ]
   in
-  pp_titled_card_list "Menu" ff l
+  Format.fprintf ff "@[<hov>%a@]]"
+    Format.(pp_print_list ~pp_sep:(fun out () -> fprintf out ";@ ") pp_card)
+    l
 
 let pp_player_list ff = function
   | [] -> Format.fprintf ff "Players: []"

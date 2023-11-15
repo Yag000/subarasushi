@@ -40,6 +40,7 @@ val equal_special : special -> special -> bool
 
 type dessert = MatchaIceCream | Fruit of fruit_kind list | Pudding
 
+val fruit_list : dessert list
 val equal_dessert : dessert -> dessert -> bool
 
 type card =

@@ -1,3 +1,5 @@
+open Utils
+
 type nigiri = Egg | Salmon | Squid [@@deriving show, eq]
 type sushi_roll = Maki of int | Temaki | Uramaki of int [@@deriving show, eq]
 type shape = Circle | Triangle | Square | Rectangle [@@deriving show, eq]
@@ -73,7 +75,7 @@ let menu_of_default_menu = function
   | DinnerForTwo ->
       (Uramaki 0, Onigiri Circle, Tofu, MisoSoup, Menu 0, SpecialOrder, Fruit [])
 
-type deck = card list * dessert [@@deriving show, eq]
+type deck = card list * dessert list [@@deriving show, eq]
 type hand = card list [@@deriving eq]
 
 (** Check that all [appetizer]s and [special]s are different from each other *)
@@ -125,16 +127,18 @@ let rec from_n_choose_2 elements =
   | element :: rest ->
       List.map (fun x -> (x, element)) elements @ from_n_choose_2 rest
 
+let fruit_list =
+  from_n_choose_2 [ Watermelon; Orange; Pineapple ]
+  |> List.map (fun (fruit1, fruit2) ->
+         List.init
+           (if fruit1 = fruit2 then 2 else 3)
+           (fun _ -> Fruit [ fruit1; fruit2 ]))
+  |> List.flatten
+
 let match_dessert = function
   | MatchaIceCream -> List.init 15 (fun _ -> MatchaIceCream)
   | Pudding -> List.init 15 (fun _ -> Pudding)
-  | Fruit _ ->
-      from_n_choose_2 [ Watermelon; Orange; Pineapple ]
-      |> List.map (fun (fruit1, fruit2) ->
-             List.init
-               (if fruit1 = fruit2 then 2 else 3)
-               (fun _ -> Fruit [ fruit1; fruit2 ]))
-      |> List.flatten
+  | Fruit _ -> fruit_list
 
 (** Call card_to_deck (Appetizer z) will return a list of 3 elements 'Appetizer z' *)
 let card_to_deck = function
@@ -166,13 +170,13 @@ let create_deck menu =
       ]
       |> List.map card_to_deck |> List.flatten
     in
-    (deck_template, d)
+    (deck_template, match_dessert d)
 
 (** Transform a [deck] in a ([card] list * [dessert]) 
     Used for testing *)
 let deck_deconstruct deck =
   let card_list, dess = deck in
-  (card_list, dess)
+  (card_list, List.hd dess |> function Fruit _ -> Fruit [] | x -> x)
 
 (** Filter all the desserts in a [deck] *)
 let filter_desserts (deck, dessert_type) =
@@ -182,8 +186,8 @@ let filter_desserts (deck, dessert_type) =
     dessert_type )
 
 let create_deck_keeping_desserts (deck : deck) (menu : menu) : deck =
-  let complete_deck, dessert_type = create_deck menu in
-  (complete_deck @ (filter_desserts deck |> fst), dessert_type)
+  let complete_deck, _ = create_deck menu in
+  (complete_deck @ (filter_desserts deck |> fst), snd deck)
 
 (** Associate a random bits to every element of the list, than sort it by the bits, and remove them *)
 let shuffle_cards cards = Utils.list_shuffle cards
@@ -197,9 +201,26 @@ let how_many_desserts nb_players round =
     | _ -> raise (Invalid_argument "Round not supported")
   else 7 - (2 * (round - 1))
 
-let add_desserts_to_deck (cards, dessert) nb_players round =
-  List.init (how_many_desserts nb_players round) (fun _ -> Dessert dessert)
-  @ cards
+let list_remove_first_occ l x =
+  let rec aux l acc =
+    match l with
+    | [] -> raise Not_found
+    | hd :: tl when hd = x -> List.rev acc @ tl
+    | hd :: tl -> aux tl (hd :: acc)
+  in
+  aux l []
+
+(** [add_desserts_to_deck cards dessert nb_players round] : add [dessert] to [cards] based on the number of players and the round they are in. Returns a new deck with the desserts added *)
+let add_desserts_from_deck (cards, desserts) nb_players round =
+  let add_desserts_to_deck =
+    list_random_n_elements (how_many_desserts nb_players round) desserts
+    |> List.map (fun dessert -> Dessert dessert)
+  in
+  ( cards @ add_desserts_to_deck,
+    ( cards,
+      List.fold_left list_remove_first_occ desserts
+        (add_desserts_to_deck
+        |> List.filter_map (function Dessert d -> Some d | _ -> None)) ) )
 
 (** [get_n_cards] : return n cards from a [card list]. If there are not enough cards, raise an error *)
 let get_n_cards cards n =
@@ -217,10 +238,10 @@ let number_of_cards_to_deal ~nb_players = 11 - (nb_players / 2)
 
 (** [deal_cards] : Deal a certain amount of cards based on the number of players and the round they are in. Returns all hands and a deck of undistributed cards *)
 let deal_cards deck ~nb_players ~round =
-  let _, dessert = deck in
   let total_of_card_per_player = number_of_cards_to_deal ~nb_players in
-  let cards = add_desserts_to_deck deck nb_players round |> shuffle_cards in
-  let hands, deck =
+  let cards, deck = add_desserts_from_deck deck nb_players round in
+  let cards = shuffle_cards cards in
+  let hands, deck_cards =
     List.fold_left
       (fun (hands, cards) _ ->
         let new_hand, cards = get_n_cards cards total_of_card_per_player in
@@ -228,7 +249,7 @@ let deal_cards deck ~nb_players ~round =
       ([], cards)
       (List.init nb_players (fun _ -> []))
   in
-  (hands, (deck, dessert))
+  (hands, (deck_cards, snd deck))
 
 (** Using a module to avoid conflicts with the [card] type. *)
 module CardType = struct

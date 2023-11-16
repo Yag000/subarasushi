@@ -15,6 +15,8 @@ val pp_titled_card_list : string -> Format.formatter -> card list -> unit
 val pp_hand : Format.formatter -> hand -> unit
 val pp_player : Format.formatter -> player -> unit
 val pp_player_list : Format.formatter -> player list -> unit
+val pp_card_ignore_data : Format.formatter -> card -> unit
+val pp_option_list : card list -> string
 val pp_menu : Format.formatter -> menu -> unit
 val pp_win : Format.formatter -> win -> unit
 val pp_game_ending : Format.formatter -> game_ending -> unit

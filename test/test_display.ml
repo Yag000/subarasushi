@@ -159,8 +159,7 @@ let test_custom_player =
     (Format.asprintf "%a" pp_player player)
 
 let test_partysampler_menu =
-  test_pp
-    "Menu : [Nigiri; Temaki; Tmpura; Dmplng; Tofu; Wasabi; Menu 0; Matcha]"
+  test_pp "Menu : [Nigiri; Temaki; Tmpura; Dmplng; Tofu; Wasabi; Menu; Matcha]"
     (Format.asprintf "%a" pp_menu (menu_of_default_menu PartySampler))
 
 let test_game_status =
@@ -176,7 +175,7 @@ let test_game_status =
   test_pp
     "Round: 2\n\
      Turn: 7\n\
-     Menu : [Nigiri; MakiRo 0; Tmpura; Sashmi; Dmplng; Chpstk 0; Wasabi; Puddng]\n\
+     Menu : [Nigiri; MakiRo; Tmpura; Sashmi; Dmplng; Chpstk; Wasabi; Puddng]\n\
      Players: [\n\
      Robert (0 pts)\n\
     \    Desserts: []\n\

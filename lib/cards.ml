@@ -233,6 +233,13 @@ let get_n_cards cards n =
   in
   gnc cards [] n
 
+let get_n_cards_from_deck deck n =
+  let cards, dessert = deck in
+  try
+    let n_cards, cards = get_n_cards cards n in
+    (n_cards, (cards, dessert))
+  with Invalid_argument _ -> ([], deck)
+
 (** Return the number of cards to deal per player for each round *)
 let number_of_cards_to_deal ~nb_players = 11 - (nb_players / 2)
 
@@ -307,15 +314,21 @@ module CardType = struct
     | FaceDown card -> card_type_of_card card
 end
 
-(** Remove from a [deck] the n firsts cards with type matching the card passed in argument *)
-let remove_n_cards_of_type (cards, dessert) ~to_remove card =
-  if to_remove = 0 then (cards, dessert)
+(** Remove from a [card list] the n firsts cards with type matching the  given [card] *)
+let remove_n_cards_of_type ?(strict = false) cards ~total_to_remove card =
+  if total_to_remove = 0 then cards
   else
-    ( List.fold_left
-        (fun (n, acc) c ->
-          if CardType.card_type_of_card c = CardType.card_type_of_card card then
-            (n - 1, acc)
-          else (n, c :: acc))
-        (to_remove, []) cards
-      |> snd,
-      dessert )
+    List.fold_left
+      (fun (n, acc) c ->
+        if n = 0 then (n, c :: acc)
+        else if
+          CardType.card_type_of_card c = CardType.card_type_of_card card
+          && ((not strict) || c = card)
+        then (n - 1, acc)
+        else (n, c :: acc))
+      (total_to_remove, []) cards
+    |> snd
+
+(** Remove from a [deck] the n firsts cards with type matching the card passed in argument *)
+let remove_n_cards_of_type_from_deck (cards, dessert) ~total_to_remove card =
+  (remove_n_cards_of_type cards ~total_to_remove card, dessert)

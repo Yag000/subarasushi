@@ -101,8 +101,15 @@ val number_of_cards_to_deal : nb_players:int -> int
 val deal_cards : deck -> nb_players:int -> round:int -> hand list * deck
 (** [deal_cards] : from a [deck], the number of players, and the current round, distribute cards to each player and an undistributed [deck] of cards. *)
 
-val remove_n_cards_of_type : deck -> to_remove:int -> card -> deck
-(** Remove from a [deck] the n firsts cards with type matching the [card] passed in argument *)
+val get_n_cards_from_deck : deck -> int -> card list * deck
+
+val remove_n_cards_of_type :
+  ?strict:bool -> card list -> total_to_remove:int -> card -> card list
+(** Remove from a [card list] the n firsts cards with type matching the  given [card] *)
+
+val remove_n_cards_of_type_from_deck :
+  deck -> total_to_remove:int -> card -> deck
+(** Remove from a [deck] the n firsts cards with type matching the given [card] *)
 
 (** Using a module to avoid conflicts with the [card] type. *)
 module CardType : sig

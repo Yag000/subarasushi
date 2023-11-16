@@ -26,8 +26,22 @@ let random_sublist_is_included_in_list =
       let x = list_random_elements l in
       List.for_all (fun x -> List.mem x l) x)
 
+let list_included_in_itself =
+  let open QCheck in
+  Test.make ~count:100 ~name:"for all l, l in l" (list small_int) (fun l ->
+      includes l l)
+
+let sublist_is_included_in_list =
+  let open QCheck in
+  Test.make ~count:100
+    ~name:"for all l1, for all l2 in list_random_elements l1, l2 in l1"
+    (list small_int) (fun l1 ->
+      let l2 = list_random_elements l1 in
+      includes l1 l2)
+
 let () =
   let open Alcotest in
+  Random.self_init ();
   run "Utils"
     [
       ( "partition_list",
@@ -117,5 +131,20 @@ let () =
               let l' = list_random_elements l in
               check (list int) "l1" [] l');
           QCheck_alcotest.to_alcotest random_sublist_is_included_in_list;
+        ] );
+      ( "Includes",
+        [
+          test_case "trivial" `Quick (fun () ->
+              let l1 : int list = [] in
+              let l2 : int list = [] in
+              let b = includes l1 l2 in
+              check bool "b" true b);
+          test_case "One element included" `Quick (fun () ->
+              let l1 : int list = [ 1; 2; 3 ] in
+              let l2 : int list = [ 1 ] in
+              let b = includes l1 l2 in
+              check bool "b" true b);
+          QCheck_alcotest.to_alcotest list_included_in_itself;
+          QCheck_alcotest.to_alcotest sublist_is_included_in_list;
         ] );
     ]

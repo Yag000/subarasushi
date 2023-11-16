@@ -45,9 +45,12 @@ let list_random_elements l =
     list_random_n_elements n l
 
 (** Shuffles the list. *)
-let list_shuffle l =
-  let nd = List.map (fun c -> (Random.bits (), c)) l in
-  List.sort compare nd |> List.map snd
+let rec list_shuffle = function
+  | [] -> []
+  | [ single ] -> [ single ]
+  | list ->
+      let before, after = List.partition (fun _elt -> Random.bool ()) list in
+      List.rev_append (list_shuffle before) (list_shuffle after)
 
 (** `find_index f xs` returns `Some i`, where `i` is the index of the first element of the list `xs` that satisfies `f x`, if there is such an element.
     It returns `None` if there is no such element. *)

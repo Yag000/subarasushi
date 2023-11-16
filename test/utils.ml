@@ -109,28 +109,42 @@ let generator_appetizer =
       Gen.return Tofu;
     ]
 
+let chopsticks_generator =
+  let open QCheck in
+  Gen.oneof
+    [
+      Gen.return (Chopsticks 1);
+      Gen.return (Chopsticks 2);
+      Gen.return (Chopsticks 3);
+    ]
+
+let spoon_generator =
+  let open QCheck in
+  Gen.oneof [ Gen.return (Spoon 4); Gen.return (Spoon 5); Gen.return (Spoon 6) ]
+
+let menu_card_generator =
+  let open QCheck in
+  Gen.oneof [ Gen.return (Menu 7); Gen.return (Menu 8); Gen.return (Menu 9) ]
+
+let takeoutbox_generator =
+  let open QCheck in
+  Gen.oneof
+    [
+      Gen.return (TakeOutBox 10);
+      Gen.return (TakeOutBox 11);
+      Gen.return (TakeOutBox 12);
+    ]
+
 let generator_special =
   let open QCheck in
   Gen.oneof
     [
-      Gen.oneof
-        [
-          Gen.return (Chopsticks 1);
-          Gen.return (Chopsticks 2);
-          Gen.return (Chopsticks 3);
-        ];
-      Gen.oneof
-        [ Gen.return (Menu 7); Gen.return (Menu 8); Gen.return (Menu 9) ];
+      chopsticks_generator;
+      menu_card_generator;
       Gen.return SoySauce;
-      Gen.oneof
-        [ Gen.return (Spoon 4); Gen.return (Spoon 5); Gen.return (Spoon 6) ];
+      spoon_generator;
       Gen.return SpecialOrder;
-      Gen.oneof
-        [
-          Gen.return (TakeOutBox 10);
-          Gen.return (TakeOutBox 11);
-          Gen.return (TakeOutBox 12);
-        ];
+      takeoutbox_generator;
       Gen.return Tea;
       Gen.return (Wasabi None);
     ]
@@ -235,9 +249,153 @@ let generator_player =
        (Gen.list_size (Gen.int_range 0 10) generator_card)
        (Gen.list_size (Gen.int_range 0 15) generator_dessert)
 
+let generator_player_internal =
+  let open QCheck in
+  Gen.map (fun (table, desserts) ->
+      let player = default_named_player "test" in
+      { player with table; desserts })
+  @@ Gen.pair
+       (Gen.list_size (Gen.return 10) generator_card)
+       (Gen.list_size (Gen.int_range 0 15) generator_dessert)
+
 let arbitrary_player =
   QCheck.make ~print:(Format.asprintf "%a" pp_player) generator_player
 
 let testable_win =
   let open Alcotest in
   testable (Fmt.of_to_string (Format.asprintf "%a" pp_win)) equal_win
+
+let card_type_list_of_menu menu =
+  let s, a1, a2, a3, s1, s2, d = menu in
+  [
+    SushiRoll s;
+    Appetizer a1;
+    Appetizer a2;
+    Appetizer a3;
+    Special s1;
+    Special s2;
+    Dessert d;
+  ]
+  |> List.map CardType.card_type_of_card
+
+let is_in_menu card menu =
+  match CardType.card_type_of_card card with
+  | Nigiri -> true
+  | x -> List.mem x menu
+
+let get_generator card : card QCheck.Gen.t =
+  let open QCheck in
+  match CardType.card_type_of_card card with
+  | CardType.Nigiri -> generator_nigiri |> Gen.map (fun x -> Nigiri x)
+  | CardType.Maki -> generator_maki |> Gen.map (fun x -> SushiRoll x)
+  | CardType.Uramaki -> generator_uramaki |> Gen.map (fun x -> SushiRoll x)
+  | CardType.Temaki -> Gen.return Temaki |> Gen.map (fun x -> SushiRoll x)
+  | CardType.Eel -> Gen.return Eel |> Gen.map (fun x -> Appetizer x)
+  | CardType.Dumpling -> Gen.return Dumpling |> Gen.map (fun x -> Appetizer x)
+  | CardType.Edamame -> Gen.return Edamame |> Gen.map (fun x -> Appetizer x)
+  | CardType.MisoSoup -> Gen.return MisoSoup |> Gen.map (fun x -> Appetizer x)
+  | CardType.Sashimi -> Gen.return Sashimi |> Gen.map (fun x -> Appetizer x)
+  | CardType.Tempura -> Gen.return Tempura |> Gen.map (fun x -> Appetizer x)
+  | CardType.Tofu -> Gen.return Tofu |> Gen.map (fun x -> Appetizer x)
+  | CardType.Onigiri -> generator_onigiri |> Gen.map (fun x -> Appetizer x)
+  | CardType.SoySauce -> Gen.return SoySauce |> Gen.map (fun x -> Special x)
+  | CardType.Wasabi -> Gen.return (Wasabi None) |> Gen.map (fun x -> Special x)
+  | CardType.Chopsticks -> chopsticks_generator |> Gen.map (fun x -> Special x)
+  | CardType.Spoon -> spoon_generator |> Gen.map (fun x -> Special x)
+  | CardType.Menu -> menu_card_generator |> Gen.map (fun x -> Special x)
+  | CardType.SpecialOrder ->
+      Gen.return SpecialOrder |> Gen.map (fun x -> Special x)
+  | CardType.TakeOutBox -> takeoutbox_generator |> Gen.map (fun x -> Special x)
+  | CardType.Tea -> Gen.return Tea |> Gen.map (fun x -> Special x)
+  | CardType.Pudding -> Gen.return Pudding |> Gen.map (fun x -> Dessert x)
+  | CardType.MatchaIceCream ->
+      Gen.return MatchaIceCream |> Gen.map (fun x -> Dessert x)
+  | CardType.Fruit -> generator_fruit |> Gen.map (fun x -> Dessert x)
+
+let card_generator_from_menu menu =
+  let open QCheck in
+  let sr, a1, a2, a3, s1, s2, d = menu in
+  Gen.oneof
+    [
+      generator_nigiri |> Gen.map (fun x -> Nigiri x);
+      get_generator (SushiRoll sr);
+      get_generator (Appetizer a1);
+      get_generator (Appetizer a2);
+      get_generator (Appetizer a3);
+      get_generator (Special s1);
+      get_generator (Special s2);
+      get_generator (Dessert d);
+    ]
+
+let generator_internal_game_status strategy menu =
+  let open QCheck in
+  Gen.map
+    (fun ( players,
+           hands,
+           played_uramakis,
+           total_special_order_copying_desserts,
+           current_round,
+           current_turn ) ->
+      let menu_list = card_type_list_of_menu menu in
+      let hand_size =
+        number_of_cards_to_deal ~nb_players:(List.length players)
+        - current_turn + 1
+      in
+      let min_table_size =
+        max
+          (number_of_cards_to_deal ~nb_players:(List.length players))
+          (List.fold_left
+             (fun acc p -> min acc (List.length p.table))
+             0 players)
+      in
+      {
+        players =
+          List.mapi
+            (fun i p ->
+              let table =
+                List.filter (fun c -> is_in_menu c menu_list) p.table
+              in
+              let nb_cards_to_remove = List.length p.table - min_table_size in
+              let table =
+                List.filteri (fun i _ -> i >= nb_cards_to_remove) table
+              in
+              let hand = List.nth hands i in
+              let nb_cards_to_remove = List.length hand - hand_size in
+              let hand =
+                List.filteri (fun i _ -> i >= nb_cards_to_remove) hand
+              in
+              { player = { p with table; id = i }; strategy; hand })
+            players;
+        played_uramakis;
+        total_special_order_copying_desserts;
+        current_round;
+        current_turn;
+        deck = create_deck menu;
+        menu;
+      })
+    (Gen.tup6
+       (Gen.list_size (Gen.int_range 3 6) generator_player)
+       (Gen.list_size (Gen.return 8)
+          (Gen.list_size (Gen.return 10) (card_generator_from_menu menu)))
+       (Gen.int_range 0 3) (Gen.int_range 0 6) (Gen.int_range 1 3)
+       (Gen.int_range 1 3))
+
+let pp_internal_game_status ff game_status =
+  let players = List.map (fun p -> p.player) game_status.players in
+  let hands = List.map (fun p -> p.hand) game_status.players in
+  Format.fprintf ff "Current round: %d@." game_status.current_round;
+  Format.fprintf ff "Current turn: %d@." game_status.current_turn;
+  Format.fprintf ff "players: %a@." pp_player_list players;
+  Format.fprintf ff "Hands: [@[<hov>%a@]]@."
+    Format.(pp_print_list ~pp_sep:pp_print_space pp_hand)
+    hands;
+  Format.fprintf ff "Played uramakis: %d@." game_status.played_uramakis;
+  Format.fprintf ff "Total special order copying desserts: %d@."
+    game_status.total_special_order_copying_desserts;
+  Format.fprintf ff "Deck: %a@." pp_deck game_status.deck;
+  Format.fprintf ff "Menu: %a@." pp_menu game_status.menu
+
+let arbitrary_internal_game_status ?(menu = menu_of_default_menu PartySampler)
+    strategy =
+  QCheck.make ~print:(Format.asprintf "%a" pp_internal_game_status)
+  @@ generator_internal_game_status strategy menu

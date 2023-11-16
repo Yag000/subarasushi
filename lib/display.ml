@@ -199,12 +199,12 @@ let pp_game_ending ff { winners; players } =
   Format.fprintf ff "@.";
   pp_leaderboard ff players
 
-let pp_player_status ff { player; hand } =
+let pp_player_status ff ({ player; hand } : player_status) =
   pp_player ff player;
   Format.fprintf ff "@.    ";
   pp_hand ff hand
 
-let pp_game_status ff game_status =
+let pp_game_status ff (game_status : game_status) =
   Format.fprintf ff "Round: %d@.Turn: %d@." game_status.current_round
     game_status.current_turn;
   pp_menu ff game_status.menu;

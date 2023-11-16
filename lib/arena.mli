@@ -6,6 +6,7 @@ type game_status = {
   current_round : int;
   current_turn : int;
   menu : menu;
+  number_of_tries : int;
 }
 (** Current game status. This information is public, no details about the
 players' hands are given. *)
@@ -77,5 +78,33 @@ val game_ending_of_player_list : player list -> game_ending
 type game_settings = { players : (player_strategy * string) list; menu : menu }
 (** Basic game settings. It contains the players (how they are called and their strategy) and the menu. *)
 
-val arena : game_settings -> game_ending
+type strategized_player = {
+  player : player;
+  hand : hand;
+  strategy : player_strategy;
+}
+(** Player with a strategy. *)
+
+type internal_game_status = {
+  players : strategized_player list;
+  played_uramakis : int;
+  total_special_order_copying_desserts : int;
+  current_round : int;
+  current_turn : int;
+  deck : deck;
+  menu : menu;
+}
+(** Current game status. This contains the details needed to
+    compute the next game status. This information is private and a
+    public counterpart is given by [game_status]. It should only be 
+    used for testing purposes. *)
+
+val pass_hands : strategized_player list -> strategized_player list
+(** All players give their hand to the player on their left. *)
+
+val play_turn :
+  number_of_tries:int -> internal_game_status -> internal_game_status
+(** Play a turn. *)
+
+val arena : ?number_of_tries:int -> game_settings -> game_ending
 (** Start a game with the given settings. *)

@@ -58,6 +58,12 @@ let find_index f =
   in
   fi 0
 
+let is_empty l = List.length l = 0
+
+(** Partition a [('a * 'b) list] using a predicate ['b -> bool] 
+    @see List.partition *)
+let partition_by_snd f = List.partition (fun (_, snd) -> f snd)
+
 (** A c B *)
 let includes setA setB =
   List.fold_left

@@ -91,6 +91,23 @@ let run_deal_cards_tests (name, deck) =
        []
   |> List.rev
 
+let remove_n_cards_of_type_removes_elements =
+  let open QCheck in
+  Test.make ~count:1000 ~name:"test remove n cards of type"
+    (triple (list arbitrary_card) arbitrary_card (int_range 0 100))
+    (fun (l, c, n) ->
+      let occurences =
+        List.fold_left (fun acc x -> if x = c then acc + 1 else acc) 0 l
+      in
+      let new_list =
+        remove_n_cards_of_type ~strict:true l ~total_to_remove:n c
+      in
+      let new_occurences =
+        List.fold_left (fun acc x -> if x = c then acc + 1 else acc) 0 new_list
+      in
+      if occurences <= n then new_occurences = 0
+      else new_occurences = occurences - n)
+
 let () =
   let open Alcotest in
   run "Cards"
@@ -867,4 +884,27 @@ let () =
               c
               (number_of_cards_to_deal ~nb_players:p))
           players_cards );
+      ( "remove_n_cards_of_type",
+        [
+          QCheck_alcotest.to_alcotest remove_n_cards_of_type_removes_elements;
+          test_case "empty list" `Quick (fun () ->
+              Alcotest.(check (list card_testable))
+                "same list" []
+                (remove_n_cards_of_type [] ~total_to_remove:0 (Nigiri Egg)));
+          test_case "remove one element" `Quick (fun () ->
+              Alcotest.(check (list card_testable))
+                "same list" []
+                (remove_n_cards_of_type [ Nigiri Egg ] ~total_to_remove:1
+                   (Nigiri Egg)));
+          test_case "remove same type on strcit mode" `Quick (fun () ->
+              Alcotest.(check (list card_testable))
+                "same list" [ Nigiri Egg ]
+                (remove_n_cards_of_type ~strict:true [ Nigiri Egg ]
+                   ~total_to_remove:1 (Nigiri Salmon)));
+          test_case "remove one elemnt from a 2 element list" `Quick (fun () ->
+              Alcotest.(check (list card_testable))
+                "same list" [ Nigiri Egg ]
+                (remove_n_cards_of_type [ Nigiri Egg; Nigiri Egg ]
+                   ~total_to_remove:1 (Nigiri Egg)));
+        ] );
     ]

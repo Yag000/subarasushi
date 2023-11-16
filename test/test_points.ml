@@ -47,19 +47,6 @@ let run_dessert_test_case (name, expected_points, desserts) =
 let filter_menu cards menu =
   List.filter (fun c -> List.mem (CardType.card_type_of_card c) menu) cards
 
-let card_type_list_of_menu menu =
-  let s, a1, a2, a3, s1, s2, d = menu in
-  [
-    SushiRoll s;
-    Appetizer a1;
-    Appetizer a2;
-    Appetizer a3;
-    Special s1;
-    Special s2;
-    Dessert d;
-  ]
-  |> List.map CardType.card_type_of_card
-
 let test_round_symmetry =
   let open QCheck in
   Test.make ~count:1000 ~name:"Player points do not depend on order"

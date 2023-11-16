@@ -148,58 +148,61 @@ let rec shift_position_by n position =
     they are considered to be in the same position. There is no skipping of positions. *)
 let get_positions (players : int list) : (int * position) list =
   let player_number = List.length players in
-  let players = List.mapi (fun i x -> (i, x)) players in
-  let sorted_players = List.sort (fun (_, x) (_, y) -> compare y x) players in
-  let top_points = snd (List.hd sorted_players) in
-  let winners =
-    List.filter_map
-      (fun (x, y) -> if y = top_points then Some x else None)
-      sorted_players
-  in
-  let winner_number = List.length winners in
-  let seconds =
-    if winner_number >= player_number then []
-    else
+  if player_number = 0 then []
+  else
+    let players = List.mapi (fun i x -> (i, x)) players in
+    let sorted_players = List.sort (fun (_, x) (_, y) -> compare y x) players in
+    let top_points = snd (List.hd sorted_players) in
+    let winners =
       List.filter_map
-        (fun (x, y) ->
-          if y = snd (List.nth sorted_players winner_number) then Some x
-          else None)
+        (fun (x, y) -> if y = top_points then Some x else None)
         sorted_players
-  in
-  let seconds_number = List.length seconds in
-  let thirds =
-    (* there are no thirds on a game with less that 6 players *)
-    if player_number < 6 || winner_number + seconds_number >= player_number then
-      []
-    else
+    in
+    let winner_number = List.length winners in
+    let seconds =
+      if winner_number >= player_number then []
+      else
+        List.filter_map
+          (fun (x, y) ->
+            if y = snd (List.nth sorted_players winner_number) then Some x
+            else None)
+          sorted_players
+    in
+    let seconds_number = List.length seconds in
+    let thirds =
+      (* there are no thirds on a game with less that 6 players *)
+      if player_number < 6 || winner_number + seconds_number >= player_number
+      then []
+      else
+        List.filter_map
+          (fun (x, y) ->
+            if
+              y = snd (List.nth sorted_players (winner_number + seconds_number))
+            then Some x
+            else None)
+          sorted_players
+    in
+    let last =
       List.filter_map
         (fun (x, y) ->
-          if y = snd (List.nth sorted_players (winner_number + seconds_number))
+          if
+            y = snd (List.nth sorted_players (player_number - 1))
+            && y != top_points
           then Some x
           else None)
         sorted_players
-  in
-  let last =
-    List.filter_map
-      (fun (x, y) ->
-        if
-          y = snd (List.nth sorted_players (player_number - 1))
-          && y != top_points
-        then Some x
-        else None)
-      sorted_players
-  in
-  List.map
-    (fun (x, played) ->
-      ( x,
-        if played = 0 then Last
-        else if List.mem x winners then First
-        else if List.mem x seconds then Second
-        else if List.mem x thirds then Third
-        else if List.mem x last then Last
-        else Other ))
-    players
-  |> List.sort (fun (x, _) (y, _) -> compare x y)
+    in
+    List.map
+      (fun (x, played) ->
+        ( x,
+          if played = 0 then Last
+          else if List.mem x winners then First
+          else if List.mem x seconds then Second
+          else if List.mem x thirds then Third
+          else if List.mem x last then Last
+          else Other ))
+      players
+    |> List.sort (fun (x, _) (y, _) -> compare x y)
 
 (** Finds the first [sushi_roll] of a list of cards. If none is present it defaults to [Uramaki] *)
 let find_sushiroll hands =

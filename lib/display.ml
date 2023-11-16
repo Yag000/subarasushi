@@ -107,6 +107,41 @@ let pp_player ff (player : player) =
   Format.fprintf ff "@.    ";
   pp_titled_card_list "Table" ff player.table
 
+(** Pretty print a card, ignoring its data. *)
+let pp_card_ignore_data ff (card : card) =
+  match card with
+  | Nigiri n -> pp_nigiri ff n
+  | SushiRoll sr -> (
+      match sr with
+      | Maki _ -> Format.fprintf ff "MakiRo"
+      | Uramaki _ -> Format.fprintf ff "UrMaki"
+      | x -> pp_sushi_roll ff x)
+  | Appetizer ap -> (
+      match ap with
+      | Onigiri _ -> Format.fprintf ff "Oni"
+      | x -> pp_appetizer ff x)
+  | Special sp -> (
+      match sp with
+      | Chopsticks _ -> Format.fprintf ff "Chpstk"
+      | Spoon _ -> Format.fprintf ff "Spoon"
+      | Menu _ -> Format.fprintf ff "Menu"
+      | TakeOutBox _ -> Format.fprintf ff "TkoBox"
+      | x -> pp_special ff x)
+  | Dessert d -> (
+      match d with Fruit _ -> Format.fprintf ff "Fruit" | _ -> pp_dessert ff d)
+  | FaceDown _ -> Format.fprintf ff "FcDown"
+
+(** Pretty print a list of cards, ignoring their data and adding their position
+    in the list. *)
+let pp_option_list (l : card list) =
+  let rec loop i = function
+    | [] -> ""
+    | [ h ] -> Format.asprintf "%a (%d)" pp_card_ignore_data h i
+    | h :: t ->
+        Format.asprintf "%a (%d)@.%s" pp_card_ignore_data h i (loop (i + 1) t)
+  in
+  loop 1 l
+
 let pp_menu ff (sr, app1, app2, app3, sp1, sp2, dess) =
   Format.fprintf ff "Menu : [Nigiri; ";
   let l =
@@ -121,7 +156,10 @@ let pp_menu ff (sr, app1, app2, app3, sp1, sp2, dess) =
     ]
   in
   Format.fprintf ff "@[<hov>%a@]]"
-    Format.(pp_print_list ~pp_sep:(fun out () -> fprintf out ";@ ") pp_card)
+    Format.(
+      pp_print_list
+        ~pp_sep:(fun out () -> fprintf out ";@ ")
+        pp_card_ignore_data)
     l
 
 let pp_player_list ff = function

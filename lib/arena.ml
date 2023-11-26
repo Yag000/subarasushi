@@ -356,15 +356,18 @@ let put_card_in_player_desserts (sps : strategized_player list) (id : int)
 let remove_excess_miso_soup (sps, ts) =
   if ts.played_miso_soup = 0 then (sps, ts)
   else
+    let players_with_miso =
+      List.filter
+        (fun (_, c) -> CardType.card_type_of_card c = CardType.MisoSoup)
+        ts.miso_and_ura_to_place
+    in
     ( (if ts.played_miso_soup == 1 then
-         let sp, c =
-           List.hd
-             (List.filter
-                (fun (_, c) -> CardType.card_type_of_card c = CardType.MisoSoup)
-                ts.miso_and_ura_to_place)
-         in
+         let sp, c = List.hd players_with_miso in
          put_card_on_player_table sps sp.player.id c
-       else sps),
+       else
+         List.fold_left
+           (fun sps (sp, c) -> remove_card_from_player_hand sps sp.player.id c)
+           sps players_with_miso),
       {
         ts with
         miso_and_ura_to_place =
@@ -864,6 +867,7 @@ let play_turn ~number_of_tries (internal_game_status : internal_game_status) :
       + turn_status.special_order_copying_desserts;
     deck = turn_status.deck;
   }
+  |> advance_one_turn
 
 (** Advance one round. They current turn is reset to 1. *)
 let advance_one_round (internal_game_status : internal_game_status) :
@@ -962,9 +966,7 @@ let play_round (internal_game_status : internal_game_status) ~number_of_tries :
   let rec round_loop (internal_game_status : internal_game_status) =
     if internal_game_status.current_turn > number_of_turns then
       internal_game_status
-    else
-      play_turn ~number_of_tries internal_game_status
-      |> advance_one_turn |> round_loop
+    else play_turn ~number_of_tries internal_game_status |> round_loop
   in
   deal_cards_at_start internal_game_status
   |> round_loop |> compute_points_round |> advance_one_round

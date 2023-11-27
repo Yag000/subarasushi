@@ -661,12 +661,28 @@ let menu_turn (gs : game_status) (ts : turn_status) sps sp original_menu_card =
       | None -> List.hd options
       | Some c -> c
     in
-    let ts =
+    let sps, ts =
       match card with
       | Special (Menu _) | Special (TakeOutBox _) ->
-          add_action_card_to_queue action_sort_function ts sp card
-      | Special SpecialOrder -> add_special_order_to_queue ts sp card
-      | _ -> ts
+          (sps, add_action_card_to_queue action_sort_function ts sp card)
+      | Special SpecialOrder -> (sps, add_special_order_to_queue ts sp card)
+      | _ ->
+          (* I cannot simply use the function put_card_on_player_table as
+             the card is not in the player's hand and that function removes the card from the hand *)
+          ( List.map
+              (fun sp_2 ->
+                if sp.player.id = sp_2.player.id then
+                  {
+                    sp_2 with
+                    player =
+                      {
+                        sp_2.player with
+                        table = put_card_on_table card sp_2.player.table;
+                      };
+                  }
+                else sp_2)
+              sps,
+            ts )
     in
     ( remove_card_from_player_hand sps sp.player.id original_menu_card,
       {
@@ -683,7 +699,7 @@ let ask_player_what_they_want_to_flip gs sp previous_choice _ =
       else None
   | c -> c
 
-(** Given a player who choosed to play [TakeOutBox], ask them which cards they want to flip among the cards on their table. *)
+(** Given a player who chosen to play [TakeOutBox], ask them which cards they want to flip among the cards on their table. *)
 let takeout_turn game_status turn_status players player card =
   let cards_to_flip =
     List.init game_status.number_of_tries (fun _ -> ())

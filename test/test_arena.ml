@@ -41,19 +41,6 @@ let mock_test_non_empty_options =
         else List.hd options);
   }
 
-(** Forgive me Ocaml gods for what I have done, the test is necessary, but its 
-    implementation is not pretty. I am deeply sorry. *)
-let ref_total_turns = ref 0
-
-let mock_test_number_turns =
-  {
-    first_pick_strategy with
-    choose_card =
-      (fun game_status player_status ->
-        ref_total_turns := !ref_total_turns + 1;
-        first_pick_strategy.choose_card game_status player_status);
-  }
-
 let possible_cards =
   [
     SushiRoll (Maki 1);
@@ -87,8 +74,6 @@ let mock_always_plays_impossible_cards =
     first_pick_strategy with
     choose_card =
       (fun _ player_status ->
-        ref_total_turns := !ref_total_turns + 1;
-
         List.filter
           (fun card -> not (List.mem card player_status.hand))
           possible_cards
@@ -179,7 +164,7 @@ let menu_breaks_game menu player_number =
 
 let win_data_is_accurate =
   let open QCheck in
-  Test.make ~count:10000 ~name:"Game ending data is accurate"
+  Test.make ~count:100 ~name:"Game ending data is accurate"
     (pair (int_range 2 8) arbitrary_menu)
     (fun (nb_players, menu) ->
       let game_settings =
@@ -198,9 +183,10 @@ let win_data_is_accurate =
         && winner_points = (List.hd game_ending.players |> snd)
         && winners_have_same_points game_ending.winners)
 
-let test_strategy ?(min_player_numer = 2) message strategy =
+let test_strategy ?(min_player_numer = 2) ?(test_count = 5000) message strategy
+    =
   let open QCheck in
-  Test.make ~count:1000 ~name:message
+  Test.make ~count:test_count ~name:message
     (pair (int_range min_player_numer 8) arbitrary_menu)
     (fun (nb_players, menu) ->
       let game_settings =
@@ -229,6 +215,19 @@ let options_are_not_empty =
   test_strategy "Options are not empty" mock_test_non_empty_options
 
 let correct_number_of_turns =
+  (* Forgive me Ocaml gods for what I have done, the test is necessary, but its
+     implementation is not pretty. I am deeply sorry. *)
+  let ref_total_turns = ref 0 in
+
+  let mock_test_number_turns =
+    {
+      first_pick_strategy with
+      choose_card =
+        (fun game_status player_status ->
+          incr ref_total_turns;
+          first_pick_strategy.choose_card game_status player_status);
+    }
+  in
   let open QCheck in
   Test.make ~count:100 ~name:"Number of turns is correct"
     (pair (int_range 2 8) arbitrary_menu)
@@ -249,11 +248,10 @@ let correct_number_of_turns =
 
 let playing_invalid_cards =
   let open QCheck in
-  Test.make ~count:1000
+  Test.make ~count:5000
     ~name:"Playing invalid cards asks the player to retry n times"
-    (triple (int_range 2 8) (int_range 1 10) arbitrary_menu)
-    (fun (nb_players, number_of_tries, menu) ->
-      ref_total_turns := 0;
+    (pair (int_range 2 8) arbitrary_menu)
+    (fun (nb_players, menu) ->
       let game_settings =
         {
           players =
@@ -265,19 +263,19 @@ let playing_invalid_cards =
       in
       if menu_breaks_game game_settings.menu nb_players then true
       else
-        let _game_ending = arena ~number_of_tries game_settings in
-        !ref_total_turns
-        = nb_players * 3 * number_of_tries * number_of_cards_to_deal ~nb_players)
+        try
+          let _ = arena game_settings in
+          false
+        with Invalid_choice -> true)
 
 (** The minimum possible score, which is extremely hard to achieve, is -25. 
     You must use the menu Temaki, Eel, Sashimi, Miso, Chopsticks, TakeOutBox and Fruit.*)
 let points_are_never_lower_than_the_minimun_possible_score =
   let open QCheck in
-  Test.make ~count:1000
+  Test.make ~count:5000
     ~name:"Points are never lower than the minimum possible score (-25)"
     (pair (int_range 2 8) arbitrary_menu)
     (fun (nb_players, menu) ->
-      ref_total_turns := 0;
       let game_settings =
         {
           players =
@@ -293,23 +291,6 @@ let points_are_never_lower_than_the_minimun_possible_score =
 
 let decompose_player player = (player.name, player.score)
 
-let _default_internal_game_status menu nb_players strategy =
-  {
-    players =
-      List.init nb_players (fun i ->
-          {
-            player = default_named_player (Printf.sprintf "Player %d" i);
-            hand = [];
-            strategy;
-          });
-    deck = create_deck menu;
-    menu;
-    played_uramakis = 0;
-    current_turn = 1;
-    current_round = 1;
-    total_special_order_copying_desserts = 0;
-  }
-
 let default_internal_game_status menu players =
   {
     players;
@@ -319,6 +300,7 @@ let default_internal_game_status menu players =
     current_turn = 1;
     current_round = 1;
     total_special_order_copying_desserts = 0;
+    turn_status = initial_turn_status;
   }
 
 let players_from_hand_list strategy hand_list =
@@ -344,11 +326,11 @@ let test_card_is_played_next_turn menu card strategy =
   in
   let players = players_from_hand_list strategy hands in
   let internal_game_status =
-    default_internal_game_status menu players |> play_turn ~number_of_tries:3
+    default_internal_game_status menu players |> play_turn
   in
   let result =
     try
-      let _ = play_turn ~number_of_tries:3 internal_game_status in
+      let _ = play_turn internal_game_status in
       false
     with MockTestException _ -> true
   in
@@ -368,9 +350,7 @@ let test_card_is_at_pos_i ?(turn_amount = 1) pos card strat =
   in
   let game_status =
     List.init turn_amount (fun _ -> ())
-    |> List.fold_left
-         (fun game_status _ -> play_turn ~number_of_tries:3 game_status)
-         game_status
+    |> List.fold_left (fun game_status _ -> play_turn game_status) game_status
   in
   Alcotest.(check bool)
     "same" true
@@ -409,19 +389,15 @@ let turn_play_test ?(turn_amount = 1) menu hand_strat
     hand_strat |> players_from_hand_strat |> default_internal_game_status menu
   in
   List.init turn_amount (fun _ -> ())
-  |> List.fold_left
-       (fun game_status _ -> play_turn ~number_of_tries:3 game_status)
-       game_status
+  |> List.fold_left (fun game_status _ -> play_turn game_status) game_status
   |> fun x ->
   x.players |> List.map (fun player -> player.player) |> test_function
 
 let turn_play_miso_test ?(turn_amount = 1) hand_strat expected_hands =
   List.iter2
     (fun hand player ->
-      Alcotest.(check bool)
-        "contains same elements"
-        (contain_same_elements hand player.table)
-        true)
+      Alcotest.(check (list card_testable))
+        "contains same elements" hand player.table)
     expected_hands
   |> turn_play_test ~turn_amount (menu_of_default_menu DinnerForTwo) hand_strat
 
@@ -447,7 +423,7 @@ let test_play_misosoup_card_internal_game_status =
   default_internal_game_status test_play_misosoup_card_informations_menu
     test_play_misosoup_card_players
 
-let use_miso_soup_card () =
+let use_miso_soup_card =
   Alcotest.test_case "When I play a miso soup nothing happens" `Quick (fun () ->
       Alcotest.(check bool)
         "same result" true
@@ -456,42 +432,66 @@ let use_miso_soup_card () =
              let () = Format.printf "%a" pp_internal_game_status game_status in
              match n with
              | 0 -> game_status
-             | n -> repeat (play_turn ~number_of_tries:20 game_status) (n - 1)
+             | n -> repeat (play_turn game_status) (n - 1)
            in
            repeat test_play_misosoup_card_internal_game_status 9
          in
          let () = Format.printf "%a" pp_internal_game_status new_game_status in
          List.for_all (fun p -> List.length p.hand == 0) new_game_status.players))
 
+let turn_play_uramaki_test ?(turn_amount = 1) hand_strat expected_hands =
+  List.iter2
+    (fun (hand, score) player ->
+      Alcotest.(check (list card_testable)) "are same" hand player.table;
+      Alcotest.(check int) "are same" score player.score)
+    expected_hands
+  |> turn_play_test ~turn_amount (menu_of_default_menu DinnerForTwo) hand_strat
+
 let run_test_take_out message strat =
   let open QCheck in
-  Test.make ~count:1000 ~name:message
+  Test.make ~count:5000 ~name:message
     (pair (int_range 2 8) arbitrary_menu)
     (fun (nb_players, menu) ->
-      let game_settings =
-        {
-          players =
-            List.init nb_players (fun i ->
-                (strat, Printf.sprintf "Player %d" i));
-          menu;
-        }
-      in
-      if menu_breaks_game game_settings.menu nb_players then true
+      if nb_players < 2 || nb_players > 8 then true
       else
-        let _ = arena game_settings in
-        true)
+        let game_settings =
+          {
+            players =
+              List.init nb_players (fun i ->
+                  (strat, Printf.sprintf "Player %d" i));
+            menu;
+          }
+        in
+        if menu_breaks_game game_settings.menu nb_players then true
+        else
+          let _ = arena game_settings in
+          true)
 
 let hand_size_reduces_after_each_turn =
   let open QCheck in
-  Test.make ~count:10000 ~name:"Hand size reduces after each turn"
+  Test.make ~count:100 ~name:"Hand size reduces after each turn"
     (arbitrary_internal_game_status first_pick_strategy) (fun game_status ->
       let original_hand_size =
         List.hd game_status.players |> fun player -> List.length player.hand
       in
-      let new_game_status = play_turn ~number_of_tries:3 game_status in
+      let new_game_status = play_turn game_status in
       List.for_all
         (fun player -> List.length player.hand = original_hand_size - 1)
         new_game_status.players)
+
+let table_size_is_at_most_one_bigger_after_each_turn =
+  let open QCheck in
+  Test.make ~count:100 ~name:"Table size is at most one bigger after each turn"
+    (arbitrary_internal_game_status first_pick_strategy) (fun game_status ->
+      let original_sizes =
+        List.map (fun p -> List.length p.player.table) game_status.players
+      in
+      let new_game_status = play_turn game_status in
+      List.for_all2
+        (fun player original_size ->
+          let new_table_size = List.length player.player.table in
+          new_table_size <= original_size + 1)
+        new_game_status.players original_sizes)
 
 let for_all_i f l =
   let rec fai i = function [] -> true | h :: t -> f i h && fai (i + 1) t in
@@ -499,7 +499,7 @@ let for_all_i f l =
 
 let test_pass_hands =
   let open QCheck in
-  Test.make ~count:1000 ~name:"Players give correctly their hands"
+  Test.make ~count:5000 ~name:"Players give correctly their hands"
     (arbitrary_internal_game_status first_pick_strategy) (fun game_status ->
       let origin_table = List.map (fun p -> p.hand) game_status.players in
       let passed_table =
@@ -515,7 +515,7 @@ let test_pass_hands =
 
 let test_generator_internal_game_status =
   let open QCheck in
-  Test.make ~count:10000 ~name:"Generator generates properly"
+  Test.make ~count:100 ~name:"Generator generates properly"
     (arbitrary_internal_game_status first_pick_strategy) (fun game_status ->
       let hand_size =
         number_of_cards_to_deal ~nb_players:(List.length game_status.players)
@@ -538,9 +538,9 @@ let face_down_can_face_dow_all_cards =
     }
   in
   let open QCheck in
-  Test.make ~count:10000 ~name:"Face down all cards does so"
+  Test.make ~count:100 ~name:"Face down all cards does so"
     (arbitrary_internal_game_status mock_take_out_box) (fun game_status ->
-      let new_game_status = play_turn ~number_of_tries:4 game_status in
+      let new_game_status = play_turn game_status in
       List.for_all2
         (fun player old_player ->
           if
@@ -553,6 +553,54 @@ let face_down_can_face_dow_all_cards =
               player.player.table
             && List.length player.player.table
                = List.length old_player.player.table
+          else true)
+        new_game_status.players game_status.players)
+
+let can_face_down_face_down_cards =
+  let mock_take_out_box = mock_prioritize_one_card_type CardType.TakeOutBox in
+  let mock_take_out_box =
+    {
+      mock_take_out_box with
+      choose_cards_to_flip = (fun _ player -> player.table);
+    }
+  in
+  let open QCheck in
+  Test.make ~count:5000 ~name:"Face down also affects face down cards"
+    (arbitrary_internal_game_status
+       ~menu:(menu_of_default_menu MasterMenu)
+       mock_take_out_box)
+    (fun game_status ->
+      let players =
+        List.map
+          (fun p ->
+            {
+              p with
+              player =
+                {
+                  p.player with
+                  table =
+                    p.player.table
+                    |> List.map (function
+                         | Special (TakeOutBox i) -> Special (TakeOutBox i)
+                         | x -> FaceDown x);
+                };
+            })
+          game_status.players
+      in
+      let game_status = { game_status with players } in
+      let new_game_status = play_turn game_status in
+      List.for_all2
+        (fun player old_player ->
+          if
+            List.exists
+              (function Special (TakeOutBox _) -> true | _ -> false)
+              old_player.hand
+          then
+            List.for_all
+              (function FaceDown _ -> true | _ -> false)
+              player.player.table
+            && player.player.table |> List.length
+               = (old_player.player.table |> List.length)
           else true)
         new_game_status.players game_status.players)
 
@@ -582,7 +630,7 @@ let test_card_placed_implies_not_in_hand =
     }
   in
   let open QCheck in
-  Test.make ~count:10000 ~name:"Card placed implies not in hand"
+  Test.make ~count:100 ~name:"Card placed implies not in hand"
     (arbitrary_internal_game_status
        ~menu:(menu_of_default_menu MasterMenu)
        keep_track_of_playing_cards)
@@ -597,7 +645,7 @@ let test_card_placed_implies_not_in_hand =
               game_status.players;
         }
       in
-      let next_game_status = play_turn ~number_of_tries:3 game_status in
+      let next_game_status = play_turn game_status in
       List.for_all2
         (fun played_card player ->
           let player_table = player.player.table in
@@ -623,11 +671,11 @@ let test_copied_hand_is_placed =
     }
   in
   let open QCheck in
-  Test.make ~count:10000 ~name:"Card copied is placed"
+  Test.make ~count:100 ~name:"Card copied is placed"
     (arbitrary_internal_game_status keep_track_of_copied_cards)
     (fun game_status ->
       List.init 8 (fun i -> i) |> List.iter (fun i -> cards_to_copy.(i) <- []);
-      let next_game_status = play_turn ~number_of_tries:3 game_status in
+      let next_game_status = play_turn game_status in
       List.for_all2
         (fun copied_cards player ->
           let player_table = player.player.table in
@@ -694,15 +742,14 @@ let test_play_special_menu_card_internal_game_status =
   default_internal_game_status test_play_special_menu_card_informations_menu
     test_play_special_menu_card_players
 
-let use_menu_card () =
+let use_menu_card =
   Alcotest.test_case
     "The special menu card does not have a card after being played" `Quick
     (fun () ->
       Alcotest.(check bool)
         "same result" true
         (let new_game_status =
-           play_turn ~number_of_tries:20
-             test_play_special_menu_card_internal_game_status
+           play_turn test_play_special_menu_card_internal_game_status
          in
          List.for_all
            (fun p ->
@@ -730,13 +777,12 @@ let test_play_turn_internal_game_status =
   default_internal_game_status test_play_turn_informations_menu
     test_play_turn_players
 
-let test_play_turn () =
+let test_play_turn =
   Alcotest.test_case "test_play_turn" `Quick (fun () ->
       Alcotest.(check bool)
         "same result" true
-        (let new_game_status =
-           play_turn ~number_of_tries:20 test_play_turn_internal_game_status
-         in
+        (let new_game_status = play_turn test_play_turn_internal_game_status in
+         Format.printf "%a" pp_internal_game_status new_game_status;
          List.for_all
            (fun p ->
              p.hand
@@ -748,16 +794,14 @@ let test_play_turn () =
                  Appetizer Tempura;
                  Appetizer Tempura;
                ]
-             && p.player.desserts = [ Fruit [ Watermelon; Watermelon ] ]
-             && p.player.table = [])
+             && p.player.desserts = []
+             && p.player.table = [ Dessert (Fruit [ Watermelon; Watermelon ]) ])
            new_game_status.players))
 
 let () =
   let open Alcotest in
   run "Arena"
     [
-      ("use_menu_card", [ use_menu_card () ]);
-      ("test_play_turn", [ test_play_turn () ]);
       ( "Game Initialization",
         [
           test_case "No players raises an exception" `Quick (fun () ->
@@ -860,19 +904,7 @@ let () =
         [
           QCheck_alcotest.to_alcotest first_pick_startegy_does_not_brea_the_game;
         ] );
-      ( "Hands are not empty when copying",
-        [ QCheck_alcotest.to_alcotest hands_are_not_empty_when_copying ] );
-      ( "Options are not empty",
-        [ QCheck_alcotest.to_alcotest options_are_not_empty ] );
-      ( "Number of turns played is correct",
-        [ QCheck_alcotest.to_alcotest correct_number_of_turns ] );
-      ( "Points are never lower than the minimum possible score (-25)",
-        [
-          QCheck_alcotest.to_alcotest
-            points_are_never_lower_than_the_minimun_possible_score;
-        ] );
-      ( "Playing invalid cards",
-        [ QCheck_alcotest.to_alcotest playing_invalid_cards ] );
+      ("test_play_turn", [ test_play_turn ]);
       ( "Chopsticks",
         [
           test_case "Playing chopsticks means that you can play them next turn"
@@ -925,7 +957,194 @@ let () =
                     mock_prioritize_one_card (Appetizer MisoSoup) );
                 ]
                 [ []; [] ]);
-          use_miso_soup_card ();
+          use_miso_soup_card;
+          test_case "Miso soup wants to be alone with chopsticks" `Quick
+            (fun () ->
+              let mock_play_chopsticks =
+                {
+                  first_pick_strategy with
+                  choose_card =
+                    (fun _ player_status ->
+                      if List.mem (Appetizer Tofu) player_status.hand then
+                        Appetizer Tofu
+                      else Special (Chopsticks 1));
+                  play_chopsticks = (fun _ _ -> Some (Appetizer MisoSoup));
+                }
+              in
+              turn_play_miso_test ~turn_amount:2
+                [
+                  ( [ Appetizer Tofu; Appetizer MisoSoup; Appetizer MisoSoup ],
+                    mock_prioritize_one_card (Appetizer MisoSoup) );
+                  ( [
+                      Appetizer MisoSoup;
+                      Appetizer MisoSoup;
+                      Special (Chopsticks 1);
+                    ],
+                    mock_play_chopsticks );
+                ]
+                [ [ Appetizer MisoSoup ]; [ Appetizer Tofu ] ]);
+          test_case "Miso soup wants to be alone with spoon" `Quick (fun () ->
+              let mock_play_spoon =
+                {
+                  first_pick_strategy with
+                  choose_card =
+                    (fun _ player_status ->
+                      if List.mem (Appetizer Tofu) player_status.hand then
+                        Appetizer Tofu
+                      else Special (Spoon 4));
+                  play_spoon = (fun _ _ -> Some (Generic MisoSoup));
+                }
+              in
+              turn_play_miso_test ~turn_amount:2
+                [
+                  ( [ Appetizer Tofu; Appetizer MisoSoup; Appetizer MisoSoup ],
+                    mock_prioritize_one_card (Appetizer MisoSoup) );
+                  ( [ Appetizer MisoSoup; Appetizer MisoSoup; Special (Spoon 4) ],
+                    mock_play_spoon );
+                ]
+                [ [ Appetizer MisoSoup ]; [ Appetizer Tofu ] ]);
+          test_case "Miso soup wants to be alone with special order" `Quick
+            (fun () ->
+              let mock_play_special_order =
+                {
+                  first_pick_strategy with
+                  choose_card =
+                    (mock_prioritize_one_card (Special SpecialOrder))
+                      .choose_card;
+                  choose_card_to_copy = (fun _ _ -> Appetizer MisoSoup);
+                }
+              in
+              turn_play_miso_test ~turn_amount:2
+                [
+                  ( [ Appetizer Tofu; Appetizer Tofu; Special SpecialOrder ],
+                    mock_prioritize_one_card (Appetizer Tofu) );
+                  ( [
+                      Appetizer MisoSoup; Appetizer MisoSoup; Appetizer MisoSoup;
+                    ],
+                    mock_play_special_order );
+                ]
+                [ [ Appetizer Tofu ]; [ Appetizer MisoSoup ] ]);
+        ] );
+      ( "Uramaki",
+        [
+          test_case "Uramaki is played correctly" `Quick (fun () ->
+              turn_play_uramaki_test ~turn_amount:2
+                [
+                  ( [
+                      SushiRoll (Uramaki 5);
+                      SushiRoll (Uramaki 3);
+                      SushiRoll (Uramaki 5);
+                    ],
+                    mock_prioritize_one_card (SushiRoll (Uramaki 3)) );
+                  ( [
+                      SushiRoll (Uramaki 5);
+                      SushiRoll (Uramaki 3);
+                      SushiRoll (Uramaki 5);
+                    ],
+                    mock_prioritize_one_card (SushiRoll (Uramaki 5)) );
+                ]
+                [
+                  ([ SushiRoll (Uramaki 3); SushiRoll (Uramaki 3) ], 0); ([], 8);
+                ]);
+          test_case "Double uramaki placement (tie)" `Quick (fun () ->
+              turn_play_uramaki_test ~turn_amount:2
+                [
+                  ( [
+                      SushiRoll (Uramaki 5);
+                      SushiRoll (Uramaki 5);
+                      SushiRoll (Uramaki 3);
+                    ],
+                    mock_prioritize_one_card (SushiRoll (Uramaki 5)) );
+                  ( [
+                      SushiRoll (Uramaki 5);
+                      SushiRoll (Uramaki 5);
+                      SushiRoll (Uramaki 3);
+                    ],
+                    mock_prioritize_one_card (SushiRoll (Uramaki 5)) );
+                ]
+                [ ([], 8); ([], 8) ]);
+          test_case "Double uramaki placement (no tie)" `Quick (fun () ->
+              turn_play_uramaki_test ~turn_amount:3
+                [
+                  ( [
+                      SushiRoll (Uramaki 5);
+                      SushiRoll (Uramaki 4);
+                      SushiRoll (Uramaki 3);
+                    ],
+                    mock_prioritize_one_card (SushiRoll (Uramaki 5)) );
+                  ( [
+                      SushiRoll (Uramaki 5);
+                      SushiRoll (Uramaki 3);
+                      SushiRoll (Uramaki 3);
+                    ],
+                    mock_prioritize_one_card (SushiRoll (Uramaki 5)) );
+                ]
+                [ ([], 8); ([], 5) ]);
+          test_case "Uramaki is played correctly with chopsticks" `Quick
+            (fun () ->
+              let mock_play_chopsticks =
+                {
+                  first_pick_strategy with
+                  choose_card =
+                    (mock_prioritize_one_card (Special (Chopsticks 1)))
+                      .choose_card;
+                  play_chopsticks = (fun _ _ -> Some (SushiRoll (Uramaki 5)));
+                }
+              in
+              turn_play_uramaki_test ~turn_amount:2
+                [
+                  ( [ Special (Chopsticks 1); Nigiri Egg; Nigiri Egg ],
+                    mock_play_chopsticks );
+                  ( [ SushiRoll (Uramaki 5); SushiRoll (Uramaki 5); Nigiri Egg ],
+                    mock_prioritize_one_card (Nigiri Egg) );
+                ]
+                [ ([], 8); ([ Nigiri Egg; Nigiri Egg ], 0) ]);
+          test_case "Uramaki is played correctly with spoon" `Quick (fun () ->
+              let mock_play_spoon =
+                {
+                  first_pick_strategy with
+                  choose_card =
+                    (mock_prioritize_one_card (Special (Spoon 4))).choose_card;
+                  play_spoon =
+                    (fun _ _ -> Some (Specific (SushiRoll (Uramaki 5))));
+                }
+              in
+              turn_play_uramaki_test ~turn_amount:2
+                [
+                  ( [
+                      SushiRoll (Uramaki 5);
+                      SushiRoll (Uramaki 5);
+                      Special (Spoon 4);
+                    ],
+                    mock_play_spoon );
+                  ( [ SushiRoll (Uramaki 5); SushiRoll (Uramaki 5); Nigiri Egg ],
+                    mock_prioritize_one_card (Nigiri Egg) );
+                ]
+                [ ([], 8); ([ SushiRoll (Uramaki 5); Nigiri Egg ], 0) ]);
+          test_case "Uramaki is played correctly with special order" `Quick
+            (fun () ->
+              let mock_play_special_order =
+                {
+                  first_pick_strategy with
+                  choose_card =
+                    (fun game_status _ ->
+                      if game_status.current_turn = 1 then SushiRoll (Uramaki 5)
+                      else Special SpecialOrder);
+                  choose_card_to_copy = (fun _ _ -> SushiRoll (Uramaki 5));
+                }
+              in
+              turn_play_uramaki_test ~turn_amount:2
+                [
+                  ( [
+                      SushiRoll (Uramaki 5);
+                      SushiRoll (Uramaki 5);
+                      Special SpecialOrder;
+                    ],
+                    mock_prioritize_one_card (SushiRoll (Uramaki 5)) );
+                  ( [ SushiRoll (Uramaki 5); Appetizer Tofu; Nigiri Egg ],
+                    mock_play_special_order );
+                ]
+                [ ([ Nigiri Egg; SushiRoll (Uramaki 5) ], 0); ([], 8) ]);
         ] );
       ( "TakeOutBox",
         [
@@ -946,6 +1165,7 @@ let () =
           |> run_test_take_out "Flipping random subset"
           |> QCheck_alcotest.to_alcotest;
           QCheck_alcotest.to_alcotest face_down_can_face_dow_all_cards;
+          QCheck_alcotest.to_alcotest can_face_down_face_down_cards;
           test_case "face down empty table" `Quick (fun () ->
               let game_status =
                 [
@@ -956,21 +1176,60 @@ let () =
                 |> default_internal_game_status
                      (menu_of_default_menu MasterMenu)
               in
-              let new_game_status = play_turn ~number_of_tries:3 game_status in
+              let new_game_status = play_turn game_status in
               Alcotest.(check (list card_testable))
                 "same" [] (List.nth new_game_status.players 0).player.table;
               Alcotest.(check (list card_testable))
                 "same" [ Nigiri Egg ]
                 (List.nth new_game_status.players 1).player.table);
         ] );
+      ("use_menu_card", [ use_menu_card ]);
       ( "SpecialOrder",
-        [ QCheck_alcotest.to_alcotest test_copied_hand_is_placed ] );
+        [
+          QCheck_alcotest.to_alcotest test_copied_hand_is_placed;
+          test_case "Play special order with another in hand" `Quick (fun () ->
+              let new_game_status =
+                [
+                  ( [
+                      Special SpecialOrder;
+                      Special SpecialOrder;
+                      Appetizer Edamame;
+                    ],
+                    mock_prioritize_one_card (Special SpecialOrder) );
+                  ( [ Appetizer Edamame; Appetizer Edamame; Appetizer Edamame ],
+                    first_pick_strategy );
+                ]
+                |> players_from_hand_strat
+                |> default_internal_game_status
+                     (menu_of_default_menu PointsPlatter)
+                |> play_turn
+              in
+              let first_player = List.hd new_game_status.players in
+              let second_player = List.nth new_game_status.players 1 in
+              Alcotest.(check (list card_testable))
+                "same" [ Special SpecialOrder ] first_player.player.table;
+              Alcotest.(check bool)
+                "same" true
+                (includes second_player.hand
+                   [ Special SpecialOrder; Appetizer Edamame ]
+                && includes
+                     [ Special SpecialOrder; Appetizer Edamame ]
+                     second_player.hand));
+        ] );
       ( "General game test",
         [
           QCheck_alcotest.to_alcotest hand_size_reduces_after_each_turn;
+          QCheck_alcotest.to_alcotest
+            table_size_is_at_most_one_bigger_after_each_turn;
           QCheck_alcotest.to_alcotest test_card_placed_implies_not_in_hand;
           QCheck_alcotest.to_alcotest table_is_empty_on_turn_1;
           QCheck_alcotest.to_alcotest hand_is_full_on_turn_1;
+          QCheck_alcotest.to_alcotest hands_are_not_empty_when_copying;
+          QCheck_alcotest.to_alcotest options_are_not_empty;
+          QCheck_alcotest.to_alcotest correct_number_of_turns;
+          QCheck_alcotest.to_alcotest
+            points_are_never_lower_than_the_minimun_possible_score;
+          QCheck_alcotest.to_alcotest playing_invalid_cards;
         ] );
       ( "Game generator",
         [ QCheck_alcotest.to_alcotest test_generator_internal_game_status ] );

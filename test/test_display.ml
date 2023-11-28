@@ -170,7 +170,6 @@ let test_game_status =
       current_round = 2;
       current_turn = 7;
       menu = menu_of_default_menu SushiGo;
-      number_of_tries = 3;
     }
   in
   test_pp

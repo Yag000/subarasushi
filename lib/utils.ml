@@ -67,7 +67,7 @@ let is_empty l = List.length l = 0
     @see List.partition *)
 let partition_by_snd f = List.partition (fun (_, snd) -> f snd)
 
-(** A c B *)
+(** B c A *)
 let includes setA setB =
   List.fold_left
     (fun (set, b) x ->

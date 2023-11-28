@@ -1,12 +1,13 @@
 open Cards
 open Player
 
+exception Invalid_choice
+
 type game_status = {
   players : player list;
   current_round : int;
   current_turn : int;
   menu : menu;
-  number_of_tries : int;
 }
 (** Current game status. This information is public, no details about the
 players' hands are given. *)
@@ -85,6 +86,16 @@ type strategized_player = {
 }
 (** Player with a strategy. *)
 
+type turn_status = {
+  played_cards : (int * card) list;
+  played_specials : (int * card) list;
+  played_miso_soups : (int * card) list;
+  played_uramakis : (int * card list) list;
+}
+
+val initial_turn_status : turn_status
+(** Initial turn status. *)
+
 type internal_game_status = {
   players : strategized_player list;
   played_uramakis : int;
@@ -93,6 +104,7 @@ type internal_game_status = {
   current_turn : int;
   deck : deck;
   menu : menu;
+  turn_status : turn_status;
 }
 (** Current game status. This contains the details needed to
     compute the next game status. This information is private and a
@@ -102,9 +114,8 @@ type internal_game_status = {
 val pass_hands : strategized_player list -> strategized_player list
 (** All players give their hand to the player on their left. *)
 
-val play_turn :
-  number_of_tries:int -> internal_game_status -> internal_game_status
+val play_turn : internal_game_status -> internal_game_status
 (** Play a turn. *)
 
-val arena : ?number_of_tries:int -> game_settings -> game_ending
+val arena : game_settings -> game_ending
 (** Start a game with the given settings. *)

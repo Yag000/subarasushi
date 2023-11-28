@@ -284,10 +284,11 @@ module CardType = struct
     | MatchaIceCream
     | Fruit
     | Pudding
+    | FaceDown
   [@@deriving show, eq]
 
   (** [card_type_of_card card] is the type of [card]. *)
-  let rec card_type_of_card : card -> t = function
+  let card_type_of_card : card -> t = function
     | Nigiri _ -> Nigiri
     | SushiRoll (Maki _) -> Maki
     | SushiRoll (Uramaki _) -> Uramaki
@@ -311,7 +312,7 @@ module CardType = struct
     | Dessert MatchaIceCream -> MatchaIceCream
     | Dessert (Fruit _) -> Fruit
     | Dessert Pudding -> Pudding
-    | FaceDown card -> card_type_of_card card
+    | FaceDown _ -> FaceDown
 end
 
 (** Remove from a [card list] the n firsts cards with type matching the  given [card] *)

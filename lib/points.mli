@@ -12,4 +12,6 @@ val count_dessert_points : player list -> player list
 type position = First | Second | Third | Other | Last
 
 val get_positions : int list -> (int * position) list
-val uramaki_points : ('a * position) list -> int -> ('a * points) list
+
+val uramaki_points :
+  ?during_round:bool -> int -> ('a * position) list -> ('a * points) list

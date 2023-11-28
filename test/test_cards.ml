@@ -108,6 +108,11 @@ let remove_n_cards_of_type_removes_elements =
       if occurences <= n then new_occurences = 0
       else new_occurences = occurences - n)
 
+let card_type_of_face_down_is_always_facedown =
+  let open QCheck in
+  Test.make ~count:1000 ~name:"test card type of face down" arbitrary_card
+    (fun card -> CardType.card_type_of_card (FaceDown card) = FaceDown)
+
 let () =
   let open Alcotest in
   run "Cards"
@@ -705,82 +710,7 @@ let () =
             ("Dessert Fruit test", Fruit, Dessert (Fruit []));
           run_card_type_of_card_test_case
             ("Dessert Pudding test", Pudding, Dessert Pudding);
-          run_card_type_of_card_test_case
-            ("FaceDown Nigiri Egg test", Nigiri, FaceDown (Nigiri Egg));
-          run_card_type_of_card_test_case
-            ("FaceDown Nigiri Salmon test", Nigiri, FaceDown (Nigiri Salmon));
-          run_card_type_of_card_test_case
-            ("FaceDown Nigiri Squid test", Nigiri, FaceDown (Nigiri Squid));
-          run_card_type_of_card_test_case
-            ("FaceDown SushiRoll Maki test", Maki, FaceDown (SushiRoll (Maki 0)));
-          run_card_type_of_card_test_case
-            ( "FaceDown SushiRoll Uramaki test",
-              Uramaki,
-              FaceDown (SushiRoll (Uramaki 0)) );
-          run_card_type_of_card_test_case
-            ( "FaceDown SushiRoll Temaki test",
-              Temaki,
-              FaceDown (SushiRoll Temaki) );
-          run_card_type_of_card_test_case
-            ( "FaceDown Appetizer Dumpling test",
-              Dumpling,
-              FaceDown (Appetizer Dumpling) );
-          run_card_type_of_card_test_case
-            ( "FaceDown Appetizer Edamame test",
-              Edamame,
-              FaceDown (Appetizer Edamame) );
-          run_card_type_of_card_test_case
-            ("FaceDown Appetizer Eel test", Eel, FaceDown (Appetizer Eel));
-          run_card_type_of_card_test_case
-            ( "FaceDown Appetizer Onigiri test",
-              Onigiri,
-              FaceDown (Appetizer (Onigiri Circle)) );
-          run_card_type_of_card_test_case
-            ( "FaceDown Appetizer MisoSoup test",
-              MisoSoup,
-              FaceDown (Appetizer MisoSoup) );
-          run_card_type_of_card_test_case
-            ( "FaceDown Appetizer Sashimi test",
-              Sashimi,
-              FaceDown (Appetizer Sashimi) );
-          run_card_type_of_card_test_case
-            ( "FaceDown Appetizer Tempura test",
-              Tempura,
-              FaceDown (Appetizer Tempura) );
-          run_card_type_of_card_test_case
-            ( "FaceDown Appetizer Tofu test",
-              Dumpling,
-              FaceDown (Appetizer Dumpling) );
-          run_card_type_of_card_test_case
-            ( "FaceDown Special Chopsticks test",
-              Chopsticks,
-              FaceDown (Special (Chopsticks 0)) );
-          run_card_type_of_card_test_case
-            ("FaceDown Special Spoon test", Spoon, FaceDown (Special (Spoon 0)));
-          run_card_type_of_card_test_case
-            ("FaceDown Special Menu test", Menu, FaceDown (Special (Menu 0)));
-          run_card_type_of_card_test_case
-            ( "FaceDown Special SoySauce test",
-              SoySauce,
-              FaceDown (Special SoySauce) );
-          run_card_type_of_card_test_case
-            ( "FaceDown Special SpecialOrder test",
-              SpecialOrder,
-              FaceDown (Special SpecialOrder) );
-          run_card_type_of_card_test_case
-            ( "FaceDown Special Wasabi test",
-              Wasabi,
-              FaceDown (Special (Wasabi None)) );
-          run_card_type_of_card_test_case
-            ( "FaceDown Dessert MatchaIceCream test",
-              MatchaIceCream,
-              FaceDown (Dessert MatchaIceCream) );
-          run_card_type_of_card_test_case
-            ("FaceDown Dessert Fruit test", Fruit, FaceDown (Dessert (Fruit [])));
-          run_card_type_of_card_test_case
-            ( "FaceDown Dessert Pudding test",
-              Pudding,
-              FaceDown (Dessert Pudding) );
+          QCheck_alcotest.to_alcotest card_type_of_face_down_is_always_facedown;
         ] );
       ( "menu_of_default_menu",
         [

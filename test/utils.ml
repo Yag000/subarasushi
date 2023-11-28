@@ -311,6 +311,7 @@ let get_generator card : card QCheck.Gen.t =
   | CardType.MatchaIceCream ->
       Gen.return MatchaIceCream |> Gen.map (fun x -> Dessert x)
   | CardType.Fruit -> generator_fruit |> Gen.map (fun x -> Dessert x)
+  | CardType.FaceDown -> failwith "FaceDown card should not be generated"
 
 let card_generator_from_menu menu =
   let open QCheck in
@@ -372,6 +373,7 @@ let generator_internal_game_status strategy menu =
         current_turn;
         deck = create_deck menu;
         menu;
+        turn_status = initial_turn_status;
       })
     (Gen.tup6
        (Gen.list_size (Gen.int_range 3 6) generator_player)

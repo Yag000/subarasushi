@@ -187,7 +187,7 @@ let get_positions (players : int list) : (int * position) list =
         (fun (x, y) ->
           if
             y = snd (List.nth sorted_players (player_number - 1))
-            && y != top_points
+            && y <> top_points
           then Some x
           else None)
         sorted_players
@@ -250,14 +250,16 @@ let temaki_points l =
            | _ -> 0 ))
 
 (** Computes the points won with the [uramaki] cards. *)
-let uramaki_points l played_uramakis =
+let uramaki_points ?(during_round = false) played_uramakis l =
+  let points_won = function First -> 8 | Second -> 5 | Third -> 2 | _ -> 0 in
   let winning_position = shift_position_by played_uramakis First in
-  let points_won =
-    match winning_position with First -> 8 | Second -> 5 | Third -> 2 | _ -> 0
-  in
   l
   |> List.map (fun (id, position) ->
-         (id, match position with First -> points_won | _ -> 0))
+         ( id,
+           if during_round then points_won position
+           else
+             match position with First -> points_won winning_position | _ -> 0
+         ))
 
 (** Counts the amount of cards of the same type as the given card in the hand. *)
 let count_cards card =
@@ -292,7 +294,7 @@ let compute_shared_points played_uramakis players =
   let points =
     match find_sushiroll hands with
     | Maki _ -> maki_points positions
-    | Uramaki _ -> uramaki_points positions played_uramakis
+    | Uramaki _ -> uramaki_points played_uramakis positions
     | Temaki -> temaki_points positions
   in
   List.combine points (soysauce_points hands)

@@ -710,11 +710,54 @@ let use_menu_card () =
              List.length p.desserts + List.length p.table = 1)
            new_game_status.players))
 
+let test_play_turn_informations_menu =
+  (Maki 0, Tempura, Sashimi, Tofu, Menu 0, SoySauce, Fruit [])
+
+let test_play_turn_players =
+  List.init 7 (fun _ ->
+      [
+        Dessert (Fruit [ Watermelon; Watermelon ]);
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+      ])
+  |> players_from_hand_list first_pick_strategy
+
+let test_play_turn_internal_game_status =
+  default_internal_game_status test_play_turn_informations_menu
+    test_play_turn_players
+
+let test_play_turn () =
+  Alcotest.test_case "test_play_turn" `Quick (fun () ->
+      Alcotest.(check bool)
+        "same result" true
+        (let new_game_status =
+           play_turn ~number_of_tries:20 test_play_turn_internal_game_status
+         in
+         List.for_all
+           (fun p ->
+             p.hand
+             = [
+                 Appetizer Tempura;
+                 Appetizer Tempura;
+                 Appetizer Tempura;
+                 Appetizer Tempura;
+                 Appetizer Tempura;
+                 Appetizer Tempura;
+               ]
+             && p.player.desserts = [ Fruit [ Watermelon; Watermelon ] ]
+             && p.player.table = [])
+           new_game_status.players))
+
 let () =
   let open Alcotest in
   run "Arena"
     [
       ("use_menu_card", [ use_menu_card () ]);
+      ("test_play_turn", [ test_play_turn () ]);
       ( "Game Initialization",
         [
           test_case "No players raises an exception" `Quick (fun () ->

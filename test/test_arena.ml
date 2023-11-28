@@ -425,6 +425,44 @@ let turn_play_miso_test ?(turn_amount = 1) hand_strat expected_hands =
     expected_hands
   |> turn_play_test ~turn_amount (menu_of_default_menu DinnerForTwo) hand_strat
 
+let test_play_misosoup_card_informations_menu =
+  (Maki 0, Tempura, Sashimi, Tofu, Menu 0, SoySauce, Fruit [])
+
+let test_play_misosoup_card_players =
+  List.init 2 (fun _ ->
+      [
+        Appetizer MisoSoup;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+      ])
+  |> players_from_hand_list first_pick_strategy
+
+let test_play_misosoup_card_internal_game_status =
+  default_internal_game_status test_play_misosoup_card_informations_menu
+    test_play_misosoup_card_players
+
+let use_miso_soup_card () =
+  Alcotest.test_case "When I play a miso soup nothing happens" `Quick (fun () ->
+      Alcotest.(check bool)
+        "same result" true
+        (let new_game_status =
+           let rec repeat game_status n =
+             let () = Format.printf "%a" pp_internal_game_status game_status in
+             match n with
+             | 0 -> game_status
+             | n -> repeat (play_turn ~number_of_tries:20 game_status) (n - 1)
+           in
+           repeat test_play_misosoup_card_internal_game_status 9
+         in
+         let () = Format.printf "%a" pp_internal_game_status new_game_status in
+         List.for_all (fun p -> List.length p.hand == 0) new_game_status.players))
+
 let run_test_take_out message strat =
   let open QCheck in
   Test.make ~count:1000 ~name:message
@@ -804,6 +842,7 @@ let () =
                     mock_prioritize_one_card (Appetizer MisoSoup) );
                 ]
                 [ []; [] ]);
+          use_miso_soup_card ();
         ] );
       ( "TakeOutBox",
         [

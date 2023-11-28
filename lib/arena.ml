@@ -1,12 +1,13 @@
 open Cards
 open Player
 
+exception Invalid_choice
+
 type game_status = {
   players : player list;
   current_round : int;
   current_turn : int;
   menu : menu;
-  number_of_tries : int;
 }
 (** Current game status. This information is public, no details about the
 players' hands are given. *)
@@ -80,6 +81,13 @@ type strategized_player = {
 }
 (** Player with a strategy. *)
 
+type turn_status = {
+  played_cards : (int * card) list;
+  played_specials : (int * card) list;
+  played_miso_soups : (int * card) list;
+  played_uramakis : (int * card list) list;
+}
+
 type internal_game_status = {
   players : strategized_player list;
   played_uramakis : int;
@@ -88,6 +96,7 @@ type internal_game_status = {
   current_turn : int;
   deck : deck;
   menu : menu;
+  turn_status : turn_status;
 }
 (** Current game status. This contains the details needed to
     compute the next game status. This information is private and a
@@ -98,7 +107,7 @@ type internal_game_status = {
 
 (** Quick conversion from [internal_game_status] to [game_status]. Should
     be used to give players information about the game. *)
-let game_status_of_internal_game_status internal_game_status ~number_of_tries =
+let game_status_of_internal_game_status internal_game_status =
   let players =
     List.map (fun { player; _ } -> player) internal_game_status.players
   in
@@ -107,7 +116,20 @@ let game_status_of_internal_game_status internal_game_status ~number_of_tries =
     current_round = internal_game_status.current_round;
     current_turn = internal_game_status.current_turn;
     menu = internal_game_status.menu;
-    number_of_tries;
+  }
+
+let player_status_of_strategized_player (strat_player : strategized_player) =
+  { player = strat_player.player; hand = strat_player.hand }
+
+(** Quick conversion from [internal_game_status] to [player_status]. Should
+    be used to give players information about the game. *)
+
+let initial_turn_status =
+  {
+    played_cards = [];
+    played_specials = [];
+    played_miso_soups = [];
+    played_uramakis = [];
   }
 
 (** Initializes an [internal_game_status] from [game_settings]. 
@@ -143,95 +165,312 @@ let initial_game_status (game_settings : game_settings) : internal_game_status =
       current_turn = 1;
       menu;
       deck = create_deck menu;
+      turn_status = initial_turn_status;
     }
 
-(** Advance one turn. Nothing needs to be reset *)
-let advance_one_turn (internal_game_status : internal_game_status) :
-    internal_game_status =
-  {
-    internal_game_status with
-    current_turn = internal_game_status.current_turn + 1;
-  }
+let find_splayer_with_id id igs =
+  List.find (fun sp -> sp.player.id = id) igs.players
 
-type turn_status = {
-  deck : deck;
-  played_uramakis : int;
-  played_miso_soup : int;
-  special_order_copying_desserts : int;
-  playing_spoon : (int * card) list;
-  playing_chopsticks : (int * card) list;
-  classic_cards_to_place : (strategized_player * card) list;
-  special_order_to_use : (strategized_player * card) list;
-  action_cards_to_use : (strategized_player * card) list;
-  miso_and_ura_to_place : (strategized_player * card) list;
-}
-(** This type is used to represent what's going on during a turn *)
+(** Find a player with a certain id in a list of players 
+   @raise Not_found if no players have that id *)
+let find_player_with_id id igs =
+  find_splayer_with_id id igs |> fun sp -> sp.player
 
-(** A default turn status *)
-let initial_turn_status (internal_game_status : internal_game_status) =
-  {
-    deck = internal_game_status.deck;
-    played_uramakis = 0;
-    played_miso_soup = 0;
-    special_order_copying_desserts = 0;
-    playing_spoon = [];
-    playing_chopsticks = [];
-    classic_cards_to_place = [];
-    special_order_to_use = [];
-    action_cards_to_use = [];
-    miso_and_ura_to_place = [];
-  }
+(** Map a function on the players of an [internal_game_status]. *)
+let map_sps f igs = { igs with players = f igs.players }
 
-(** Builds a [player_status] based on an [internal_game_status] *)
-let build_player_status strategized_player =
-  { player = strategized_player.player; hand = strategized_player.hand }
+let map_turn_status f igs = { igs with turn_status = f igs.turn_status }
 
-(** Insert an element into a sorted list so that for any elements a, b in 
-    the list : f a <= f b. (b is situated after a in the list)*)
-let rec insert (f : 'a -> int) (e : 'a) = function
-  | [] -> [ e ]
-  | x :: xs -> if f e <= f x then e :: x :: xs else x :: insert f e xs
+let sort_card player_id card sps =
+  let f ts =
+    match CardType.card_type_of_card card with
+    | Menu | TakeOutBox ->
+        {
+          ts with
+          played_specials = (player_id, card) :: sps.turn_status.played_specials;
+        }
+    | MisoSoup ->
+        {
+          ts with
+          played_miso_soups =
+            (player_id, card) :: sps.turn_status.played_miso_soups;
+        }
+    | Uramaki ->
+        {
+          ts with
+          played_uramakis =
+            (List.assoc_opt player_id ts.played_uramakis |> function
+             | None -> (player_id, [ card ]) :: ts.played_uramakis
+             | Some played_cards ->
+                 (player_id, card :: played_cards)
+                 :: List.remove_assoc player_id ts.played_uramakis);
+        }
+    | _ ->
+        {
+          ts with
+          played_cards = (player_id, card) :: sps.turn_status.played_cards;
+        }
+  in
+  map_turn_status f sps
 
-let add_classic_card_to_queue (ts : turn_status) (p : strategized_player)
-    (c : card) =
-  { ts with classic_cards_to_place = (p, c) :: ts.classic_cards_to_place }
+let remove_card_from_hand player_id card igs =
+  let f =
+    List.map (fun sp ->
+        if sp.player.id = player_id then
+          {
+            sp with
+            hand =
+              remove_n_cards_of_type ~strict:true sp.hand ~total_to_remove:1
+                card;
+          }
+        else sp)
+  in
+  map_sps f igs
 
-let add_special_order_to_queue (ts : turn_status) (p : strategized_player)
-    (c : card) =
-  { ts with special_order_to_use = (p, c) :: ts.special_order_to_use }
+let add_card_to_table player_id card igs =
+  let f =
+    List.map (fun sp ->
+        if sp.player.id = player_id then
+          {
+            sp with
+            player = { sp.player with table = card :: sp.player.table };
+          }
+        else sp)
+  in
+  map_sps f igs
 
-let add_action_card_to_queue f (ts : turn_status) (p : strategized_player)
-    (c : card) =
-  { ts with action_cards_to_use = insert f (p, c) ts.action_cards_to_use }
+let add_card_to_hand player_id card igs =
+  let f =
+    List.map (fun sp ->
+        if sp.player.id = player_id then { sp with hand = card :: sp.hand }
+        else sp)
+  in
+  map_sps f igs
 
-let add_miso_ura_cards_to_queue (ts : turn_status) (p : strategized_player)
-    (c : card) =
-  { ts with miso_and_ura_to_place = (p, c) :: ts.miso_and_ura_to_place }
+let remove_card_from_table player_id card igs =
+  let f =
+    List.map (fun sp ->
+        if sp.player.id = player_id then
+          {
+            sp with
+            player =
+              {
+                sp.player with
+                table =
+                  remove_n_cards_of_type ~strict:true sp.player.table
+                    ~total_to_remove:1 card;
+              };
+          }
+        else sp)
+  in
+  map_sps f igs
 
-(** Increments the uramakis counter when a player plays one *)
-let increment_played_uramakis_counter (turn_status : turn_status) =
-  { turn_status with played_uramakis = turn_status.played_uramakis + 1 }
+let validate_card_in_table splayer card =
+  if List.mem card splayer.player.table then card else raise Invalid_choice
 
-(** Increments the [MisoSoup] counter when a player plays one *)
-let increment_miso_soup_counter (turn_status : turn_status) =
-  { turn_status with played_miso_soup = turn_status.played_miso_soup + 1 }
+let validate_card_in_hand player_id igs card =
+  let sp = find_splayer_with_id player_id igs in
+  if List.mem card sp.hand then card else raise Invalid_choice
 
-let increment_spec_ord_copying_desserts (turn_status : turn_status) =
-  {
-    turn_status with
-    special_order_copying_desserts =
-      turn_status.special_order_copying_desserts + 1;
-  }
+let get_card_to_copy player_id igs =
+  let gs = game_status_of_internal_game_status igs in
+  let player = find_splayer_with_id player_id igs in
+  player.strategy.choose_card_to_copy gs player.player
+  |> validate_card_in_table player
 
-(** Given a [card list] c and a [CardType.t list] cts, filter all cards in c that have their 
- [CardType.t] the cts. *)
-let search_card_list_for_card_types (c : card list) (cts : CardType.t list) =
-  List.filter (function FaceDown _ -> false | _ -> true) c
-  |> List.filter (fun card -> List.mem (CardType.card_type_of_card card) cts)
+let remove_card_from_played_cards player_id card igs =
+  let f ts =
+    {
+      ts with
+      played_cards =
+        List.filter
+          (fun (id, c) -> id <> player_id || c <> card)
+          ts.played_cards;
+    }
+  in
+  map_turn_status f igs
 
-(** Assert a list is fully contained in one another *)
-let assert_player_choices_are_in_bounds cards choices =
-  List.length cards >= List.length choices && Utils.includes cards choices
+let remove_card_from_specials player_id card igs =
+  let f ts =
+    {
+      ts with
+      played_specials =
+        List.filter
+          (fun (id, c) -> id <> player_id || c <> card)
+          ts.played_specials;
+    }
+  in
+  map_turn_status f igs
+
+let play_card player_id card igs =
+  (match card with
+  | Nigiri card -> (
+      let player = find_player_with_id player_id igs in
+      List.find_opt
+        (function Special (Wasabi None) -> true | _ -> false)
+        player.table
+      |> function
+      | None ->
+          remove_card_from_hand player_id (Nigiri card) igs
+          |> add_card_to_table player_id (Nigiri card)
+      | Some wasabi_card ->
+          remove_card_from_hand player_id (Nigiri card) igs
+          |> remove_card_from_table player_id wasabi_card
+          |> add_card_to_table player_id (Special (Wasabi (Some card))))
+  | card ->
+      igs
+      |> remove_card_from_hand player_id card
+      |> add_card_to_table player_id card)
+  |> remove_card_from_played_cards player_id card
+
+let play_chopsticks player_id chopsticks_card igs =
+  let splayer = find_splayer_with_id player_id igs in
+  let gs = game_status_of_internal_game_status igs in
+  let ps = player_status_of_strategized_player splayer in
+  splayer.strategy.play_chopsticks gs ps |> function
+  | None -> igs
+  | Some card ->
+      let card = validate_card_in_hand player_id igs card in
+      igs |> sort_card player_id card
+      |> remove_card_from_table player_id chopsticks_card
+      |> add_card_to_hand player_id chopsticks_card
+
+let validate_card_in_card_list card_list card =
+  if List.mem card card_list then card else raise Invalid_choice
+
+let play_menu player_id menu_card igs =
+  let splayer = find_splayer_with_id player_id igs in
+  let gs = game_status_of_internal_game_status igs in
+  let options, deck = get_n_cards_from_deck igs.deck 4 in
+  if List.length options < 4 then
+    igs |> remove_card_from_hand player_id menu_card
+  else
+    let card =
+      splayer.strategy.choose_card_from_deck gs splayer.player ~options
+      |> validate_card_in_card_list options
+    in
+    { igs with deck }
+    |> add_card_to_hand player_id card
+    |> sort_card player_id card
+    |> remove_card_from_hand player_id menu_card
+
+let use_spoon player1 player2 ~spoon_card card igs =
+  igs
+  |> remove_card_from_table player1 spoon_card
+  |> remove_card_from_hand player2 card
+  |> add_card_to_hand player1 card
+  |> sort_card player1 card
+  |> add_card_to_hand player2 spoon_card
+
+(** Returns the list of player after the player with id [player_id] concatenated 
+    * with the list of players before the player with id [player_id] *)
+let player_list_spoon player_id igs =
+  let rec aux acc = function
+    | [] -> acc
+    | sp :: sps ->
+        if sp.player.id = player_id then sps @ acc else aux (sp :: acc) sps
+  in
+  aux [] igs.players
+
+let play_spoon player_id spoon_card igs =
+  let splayer = find_splayer_with_id player_id igs in
+  splayer.strategy.play_spoon
+    (game_status_of_internal_game_status igs)
+    (player_status_of_strategized_player splayer)
+  |> function
+  | None -> igs
+  | Some spoon_choice -> (
+      List.fold_left
+        (fun acc sp ->
+          match acc with
+          | Some _ -> acc
+          | None ->
+              let filter card =
+                match spoon_choice with
+                | Generic card_type ->
+                    CardType.card_type_of_card card = card_type
+                | Specific chosen_card -> chosen_card = card
+              in
+              let cards = List.filter filter sp.hand in
+              if Utils.is_empty cards then None
+              else if Utils.partition_list ( = ) cards |> List.length = 1 then
+                Some (sp.player.id, List.hd cards)
+              else
+                let card =
+                  sp.strategy.choose_card_to_give
+                    (game_status_of_internal_game_status igs)
+                    sp.player ~options:cards
+                  |> validate_card_in_hand sp.player.id igs
+                in
+                Some (sp.player.id, card))
+        None
+        (player_list_spoon player_id igs)
+      |> function
+      | None -> igs
+      | Some (player_id2, card) ->
+          use_spoon player_id player_id2 card ~spoon_card igs)
+
+let flip_down_cards player_id cards igs =
+  let f =
+    List.map (fun sp ->
+        if sp.player.id = player_id then
+          {
+            sp with
+            player =
+              {
+                sp.player with
+                table =
+                  List.fold_left
+                    (fun (remaining, acc) card ->
+                      if List.mem card remaining then
+                        ( remove_n_cards_of_type ~strict:true remaining
+                            ~total_to_remove:1 card,
+                          FaceDown card :: acc )
+                      else (remaining, card :: acc))
+                    (cards, []) sp.player.table
+                  |> snd;
+              };
+          }
+        else sp)
+  in
+
+  map_sps f igs
+
+let validate_sublist_in_table table cards =
+  if Utils.includes table cards then cards else raise Invalid_choice
+
+let play_take_out_box player_id card igs =
+  let splayer = find_splayer_with_id player_id igs in
+  let gs = game_status_of_internal_game_status igs in
+  let cards =
+    splayer.strategy.choose_cards_to_flip gs splayer.player
+    |> validate_sublist_in_table splayer.player.table
+  in
+  igs |> flip_down_cards player_id cards |> remove_card_from_hand player_id card
+
+let play_normal_cards igs =
+  List.fold_left
+    (fun igs (player_id, card) ->
+      match CardType.card_type_of_card card with
+      | SpecialOrder ->
+          let player = find_player_with_id player_id igs in
+          if Utils.is_empty player.table then play_card player_id card igs
+          else
+            let card_to_copy = get_card_to_copy player_id igs in
+            (match card_to_copy with
+            | Dessert _ ->
+                {
+                  igs with
+                  total_special_order_copying_desserts =
+                    igs.total_special_order_copying_desserts + 1;
+                }
+            | _ -> igs)
+            |> add_card_to_hand player_id card_to_copy
+            |> sort_card player_id card_to_copy
+            |> remove_card_from_hand player_id card
+            |> remove_card_from_played_cards player_id card
+      | _ -> play_card player_id card igs)
+    igs igs.turn_status.played_cards
 
 (** Extract priority from a card that has one 
    @raises Invalid_argument when card has no priority *)
@@ -241,609 +480,127 @@ let get_priority_from_card = function
   | Special (Menu p)
   | Special (TakeOutBox p) ->
       p
-  | _card -> raise (Invalid_argument "Card has no priority")
+  | _ -> raise (Invalid_argument "Card has no priority")
 
-let action_sort_function x = snd x |> get_priority_from_card
-
-let add_spoon_card_to_queue action_sort_function ts sp c =
-  if
-    List.exists
-      (fun (id, card) -> id = sp.player.id && card = c)
-      ts.playing_spoon
-  then ts
-  else add_action_card_to_queue action_sort_function ts sp c
-
-let add_chopsticks_card_to_queue action_sort_function ts sp c =
-  if
-    List.exists
-      (fun (id, card) -> id = sp.player.id && card = c)
-      ts.playing_chopsticks
-  then ts
-  else add_action_card_to_queue action_sort_function ts sp c
-
-(** Go through all the players and see if they have chopsticks or spoons in front of them. *)
-let add_spoon_chopsticks_to_queue (sps : strategized_player list)
-    (ts : turn_status) =
-  List.fold_left
-    (fun ts sp ->
-      List.fold_left
-        (fun ts c ->
-          match c with
-          | Special (Spoon _) ->
-              add_spoon_card_to_queue action_sort_function ts sp c
-          | Special (Chopsticks _) ->
-              add_chopsticks_card_to_queue action_sort_function ts sp c
-          | _ ->
-              raise
-                (Failure
-                   "Unreachable, this list should only contain spoons and \
-                    chopsticks"))
-        ts
-        (search_card_list_for_card_types sp.player.table
-           [ CardType.Spoon; CardType.Chopsticks ]))
-    ts sps
-
-(** Searches for empty [Wasabi] card and add [Nigiri] to it *)
-let add_nigiri_to_wasabi nigiri =
-  let rec add_nigiri table = function
-    | [] -> Nigiri nigiri :: table
-    | Special (Wasabi None) :: cards ->
-        (Special (Wasabi (Some nigiri)) :: table) @ cards
-    | card :: t -> add_nigiri (card :: table) t
-  in
-  add_nigiri []
-
-(** Add a card to a player's table *)
-let put_card_on_table card table =
-  match card with
-  | Nigiri nigiri -> add_nigiri_to_wasabi nigiri table
-  | card -> card :: table
-
-(** List.map over [strategized_player list]. *)
-let map_strategized_players (strategized_players : strategized_player list) f =
-  List.map f strategized_players
-
-(** Remove exactly one occurence of the exact [card] in a [card list] *)
-let remove_card_from_cards_list (card : card) (cards : card list) =
-  remove_n_cards_of_type ~strict:true cards ~total_to_remove:1 card
-
-(** Update [strategized_player] only if their id equal the given id *)
-let update_strategized_player_with_id (id : int)
-    (new_strategized_player : strategized_player -> strategized_player)
-    (strategized_player : strategized_player) =
-  if strategized_player.player.id != id then strategized_player
-  else new_strategized_player strategized_player
-
-let update_player_table (f : card list -> card list) (sp : strategized_player) =
-  { sp with player = { sp.player with table = f sp.player.table } }
-
-let update_player_hand (f : card list -> card list) (sp : strategized_player) =
-  { sp with hand = f sp.hand }
-
-let update_player_dessert (d : dessert) (sp : strategized_player) =
-  { sp with player = { sp.player with desserts = d :: sp.player.desserts } }
-
-let update_player_score (p : Points.points) (sp : strategized_player) =
-  { sp with player = { sp.player with score = sp.player.score + p } }
-
-(** Remove a card from a player's hand *)
-let remove_card_from_player_hand sps id card =
-  update_player_hand (remove_card_from_cards_list card)
-  |> update_strategized_player_with_id id
-  |> map_strategized_players sps
-
-(** Updates a player's table adding the card they asked to play *)
-let put_card_on_player_table (sps : strategized_player list) (id : int)
-    (c : card) =
-  let sps_after_putting_card =
-    update_player_table (put_card_on_table c)
-    |> update_strategized_player_with_id id
-    |> map_strategized_players sps
-  in
-  remove_card_from_player_hand sps_after_putting_card id c
-
-(** Updates a player's desserts adding the dessert they asked to play *)
-let put_card_in_player_desserts (sps : strategized_player list) (id : int)
-    (d : dessert) =
-  let sps_after_putting_dessert =
-    update_player_dessert d
-    |> update_strategized_player_with_id id
-    |> map_strategized_players sps
-  in
-  remove_card_from_player_hand sps_after_putting_dessert id (Dessert d)
-
-(** Removes played [MisoSoup] when more than one player played one *)
-let remove_excess_miso_soup (sps, ts) =
-  if ts.played_miso_soup = 0 then (sps, ts)
-  else
-    let players_with_miso =
-      List.filter
-        (fun (_, c) -> CardType.card_type_of_card c = CardType.MisoSoup)
-        ts.miso_and_ura_to_place
-    in
-    ( (if ts.played_miso_soup == 1 then
-         let sp, c = List.hd players_with_miso in
-         put_card_on_player_table sps sp.player.id c
-       else
-         List.fold_left
-           (fun sps (sp, c) -> remove_card_from_player_hand sps sp.player.id c)
-           sps players_with_miso),
-      {
-        ts with
-        miso_and_ura_to_place =
-          ts.miso_and_ura_to_place
-          |> List.filter (fun (_, card) -> card != Appetizer MisoSoup);
-      } )
-
-(** Returns the card list where the first card matching the given card has been flipped. *)
-let flip_first (card_to_flip : card) (cards : card list) =
-  let rec ff table = function
-    | [] -> table
-    | card :: cards when card = card_to_flip -> (
-        match card_to_flip with
-        | FaceDown _ -> table
-        | card -> (FaceDown card :: table) @ cards)
-    | card :: cards -> ff (card :: table) cards
-  in
-  ff [] cards
-
-(** Given a [card list] A and a [card list] B. For all cards in B, place face down a equal card in A. *)
-let flip_over_cards cards_to_flip cards =
-  List.fold_left
-    (fun cards to_flip -> flip_first to_flip cards)
-    cards cards_to_flip
-
-(** Given a player id and a [card list], flip all cards on the player's table also present in the given card list. *)
-let flip_player_cards (sps : strategized_player list) (id : int)
-    (cards_to_flip : card list) =
-  update_player_table (flip_over_cards cards_to_flip)
-  |> update_strategized_player_with_id id
-  |> map_strategized_players sps
-
-(** In a given [card list], replace the first occurence of ~this card ~by that other card. *)
-let replace ~this:(card_to_replace : card) ~by:(replacing_card : card) cards =
-  Utils.find_index (( = ) card_to_replace) cards |> function
-  | None -> cards
-  | Some index_to_replace ->
-      List.mapi
-        (fun i c -> if i <> index_to_replace then c else replacing_card)
-        cards
-
-(** Given a [strategized_player list], two indexes `~id_player_hand` and `~id_player_table` and two cards 
-    `~card_in_hand` and  `~card_on_table`, swap the card in `player i`'s hand and `player j`'s table. *)
-let swap (sps : strategized_player list) ~id_player_hand:(i : int)
-    ~id_player_table:(j : int) ~card_in_hand:(hand_card : card)
-    ~card_on_table:(table_card : card) =
-  (fun sp ->
-    match sp.player.id with
-    | id when id = i && id = j ->
-        let sp =
-          update_player_table (replace ~this:table_card ~by:hand_card) sp
-        in
-        { sp with hand = replace ~this:hand_card ~by:table_card sp.hand }
-    | id when id = i ->
-        { sp with hand = replace ~this:hand_card ~by:table_card sp.hand }
-    | id when id = j ->
-        update_player_table (replace ~this:table_card ~by:hand_card) sp
-    | _ -> sp)
-  |> map_strategized_players sps
-
-(** Go through a list of card that can be placed immediately without side effects on 
-    a player's table *)
-let place_classic_cards ((sps, ts) : strategized_player list * turn_status) =
-  let sps, ts =
-    List.fold_left
-      (fun (sps, ts) (sp, c) ->
-        match c with
-        | Dessert d -> (put_card_in_player_desserts sps sp.player.id d, ts)
-        | Special (Chopsticks _) ->
-            ( put_card_on_player_table sps sp.player.id c,
-              {
-                ts with
-                playing_chopsticks = (sp.player.id, c) :: ts.playing_chopsticks;
-              } )
-        | Special (Spoon _) ->
-            ( put_card_on_player_table sps sp.player.id c,
-              { ts with playing_spoon = (sp.player.id, c) :: ts.playing_spoon }
-            )
-        | _ -> (put_card_on_player_table sps sp.player.id c, ts))
-      (sps, ts) ts.classic_cards_to_place
-  in
-  (sps, { ts with classic_cards_to_place = [] })
-
-(** One try of asking a player what they would like to copy using the Special Order *)
-let try_to_choose_what_to_copy gs sp previous_choice _ =
-  match previous_choice with
-  | None ->
-      let choice = sp.strategy.choose_card_to_copy gs sp.player in
-      if assert_player_choices_are_in_bounds sp.hand [ choice ] then Some choice
-      else None
-  | c -> c
-
-(** Asks the player what they would like to copy using a Special Order, but letting them
- have multiple tries if they do not answer correctly. *)
-let ask_player_what_they_want_to_copy (gs : game_status) sp =
-  List.init gs.number_of_tries (fun _ -> ())
-  |> List.fold_left (try_to_choose_what_to_copy gs sp) None
-  |> function
-  | None -> sp.hand |> List.hd
-  | Some card -> card
-
-(** Plays all specials order. If a special order copy a dessert then increment the counter in [turn_status] *)
-let special_order_turn (gs : game_status)
-    ((sps, ts) : strategized_player list * turn_status) (sp, _) =
-  if Utils.is_empty sp.player.table then
-    (put_card_on_player_table sps sp.player.id (Special SpecialOrder), ts)
-  else
-    ask_player_what_they_want_to_copy gs sp |> function
-    | Dessert d ->
-        ( put_card_in_player_desserts sps sp.player.id d,
-          increment_spec_ord_copying_desserts ts )
-    | Appetizer MisoSoup ->
-        ( sps,
-          add_miso_ura_cards_to_queue
-            (ts |> increment_miso_soup_counter)
-            sp (Appetizer MisoSoup) )
-    | SushiRoll (Uramaki n) ->
-        (sps, add_miso_ura_cards_to_queue ts sp (SushiRoll (Uramaki n)))
-    | copied_card -> (put_card_on_player_table sps sp.player.id copied_card, ts)
-
-(** Copy a card already placed on a player's table *)
-let play_special_order (gs : game_status)
-    ((sps, ts) : strategized_player list * turn_status) =
-  List.fold_left (special_order_turn gs) (sps, ts) ts.special_order_to_use
-  |> fun (sps, ts) -> (sps, { ts with special_order_to_use = [] })
-
-(** One try of asking a player what they would like to pick in their hand. *)
-let try_to_choose_what_to_pick gs sp ps previous_choice _ =
-  match previous_choice with
-  | None -> (
-      sp.strategy.play_chopsticks gs ps |> function
-      | None -> Some None
-      | Some card ->
-          Some
-            (if assert_player_choices_are_in_bounds sp.hand [ card ] then
-               Some card
-             else None))
-  | c -> c
-
-(** Asks the player what they would like to pick in their hand using Chopsticks, but letting them
-  have multiples tries if they do not answer correctly. *)
-let ask_player_what_they_want_to_pick_in_hand (gs : game_status)
-    (sp : strategized_player) (ps : player_status) =
-  List.init gs.number_of_tries (fun _ -> ())
-  |> List.fold_left (try_to_choose_what_to_pick gs sp ps) None
-  |> function
-  | None -> None
-  | Some card -> card
-
-(** PLay chopsticks, or not, accordingly with what the player choosed. *)
-let chopsticks_turn (gs : game_status) (ts : turn_status) sps sp chopsticks =
-  if Utils.is_empty sp.hand then (sps, ts)
-  else
-    let player_status = build_player_status sp in
-    ask_player_what_they_want_to_pick_in_hand gs sp player_status |> function
-    | None -> (sps, ts)
-    | Some card ->
-        ( swap sps ~id_player_hand:sp.player.id ~id_player_table:sp.player.id
-            ~card_in_hand:card ~card_on_table:chopsticks,
-          ts )
-
-(** For a [strategized_player list] and a given [strategized_player], create a [strategized_player list] in a clockwise direction. 
-    Assuming that for an index `i`, the player at index `i+1` is to the left of the list. *)
-let create_clockwise_order (players : strategized_player list)
-    (player : strategized_player) : strategized_player list =
-  let players_right, players_left =
-    players
-    |> List.filter (fun p -> p.player.id <> player.player.id)
-    |> List.partition (fun p -> p.player.id > player.player.id)
-  in
-  players_left @ players_right
-
-(** Given a [spoon_choice] and [strategized_player], return the index of the first player
-    whose hand contains cards matching the spoon choice. *)
-let index_first_player_owning_requested_card (spoon_choice : spoon_choice)
-    (order : strategized_player list) : int option =
-  Utils.find_index
-    (fun p ->
-      List.exists
-        (fun card ->
-          match spoon_choice with
-          | Specific c -> card = c
-          | Generic g -> CardType.card_type_of_card card = g)
-        p.hand)
-    order
-
-(** Given a [strategized_player] and a [spoon_choice], returns all the cards matching the spoon choice. *)
-let get_choices_for_spoon (owner : strategized_player)
-    (spoon_choice : spoon_choice) =
-  List.filter
-    (fun card ->
-      match spoon_choice with
-      | Specific c -> card = c
-      | Generic g -> CardType.card_type_of_card card = g)
-    owner.hand
-
-(** Given a [strategized_player] and a [card list] containing at least one element, return one of the elements of the list according to the player's choice if it is given to them. 
-    @raises Invalid_argument if the list is empty *)
-let let_player_choose_card (game_status : game_status)
-    (owner : strategized_player) ~options =
-  match options with
-  | [] ->
-      raise (Invalid_argument "Options should contains at least one card")
-      (* Unreachable *)
-  | [ only_choice ] -> only_choice
-  | options ->
-      owner.strategy.choose_card_to_give game_status owner.player ~options
-
-(** Remove duplicates elements in a list *)
-let remove_duplicates l =
-  let rec rd acc = function
-    | [] -> acc
-    | h :: t -> rd (if List.mem h acc then acc else h :: acc) t
-  in
-  rd [] l
-
-(** Exchange the spoon card and the card choosed by the player whose being stolen. *)
-let proceed_to_exchange (game_status : game_status) (turn_status : turn_status)
-    (players : strategized_player list) (player : strategized_player)
-    (player_index_owning_request : int) (order : strategized_player list)
-    (spoon_choice : spoon_choice) played_spoon =
-  (* Compute the player owning the card, the cards that can be traded and the card they want to trade *)
-  let owner = List.nth order player_index_owning_request in
-  let can_be_choosed =
-    get_choices_for_spoon owner spoon_choice |> remove_duplicates
-  in
-  let card_choosed =
-    let_player_choose_card game_status owner ~options:can_be_choosed
-  in
-  if not (assert_player_choices_are_in_bounds owner.hand [ card_choosed ]) then
-    raise (Failure "Player choice is not in their hand.")
-  else
-    ( swap players ~id_player_hand:owner.player.id
-        ~id_player_table:player.player.id ~card_in_hand:card_choosed
-        ~card_on_table:played_spoon,
-      turn_status )
-
-(** Given a [strategized_player list], a player id and a [Spoon] card, remove the first same spoon in the table of the player. *)
-let remove_spoon_from_player (players : strategized_player list) (id : int)
-    played_spoon =
-  update_player_table (fun t ->
-      remove_n_cards_of_type ~strict:true t ~total_to_remove:1 played_spoon)
-  |> update_strategized_player_with_id id
-  |> map_strategized_players players
-
-(** When a player want to use the spoon, given the [spoon_choice] search among the other players in a particular order if one of them owns a card matching the spoon choice *)
-let player_want_to_use_spoon (game_status : game_status)
-    (turn_status : turn_status) (players : strategized_player list)
-    (player : strategized_player) played_spoon (spoon_choice : spoon_choice) =
-  let clockwise_order = create_clockwise_order players player in
-  let index_first_player_owning_requested_card =
-    index_first_player_owning_requested_card spoon_choice clockwise_order
-  in
-  match index_first_player_owning_requested_card with
-  | None ->
-      ( remove_spoon_from_player players player.player.id played_spoon,
-        turn_status )
-  | Some player_index_owning_request ->
-      proceed_to_exchange game_status turn_status players player
-        player_index_owning_request clockwise_order spoon_choice played_spoon
-
-(** Given a player who owns a [spoon] card, asks them if they want to play it and act accordingly. *)
-let spoon_turn (gs : game_status) (ts : turn_status)
-    (sps : strategized_player list) (sp : strategized_player) played_spoon =
-  (* No need to sanitize the input, as the player has free choice,if they are
-     wrong, they will simply get nothing :) *)
-  build_player_status sp |> sp.strategy.play_spoon gs |> function
-  | None -> (sps, ts)
-  | Some spoon_choice ->
-      player_want_to_use_spoon gs ts sps sp played_spoon spoon_choice
-
-let ask_player_what_they_want_to_pick_in_deck (gs : game_status)
-    (sp : strategized_player) options previous_choice _ =
-  match previous_choice with
-  | None ->
-      let c = sp.strategy.choose_card_from_deck gs sp.player ~options in
-      if assert_player_choices_are_in_bounds options [ c ] then Some c else None
-  | c -> c
-
-(** PLay Menu, accordingly with what the player choosed to pick in the deck. *)
-let menu_turn (gs : game_status) (ts : turn_status) sps sp original_menu_card =
-  let options, _ = get_n_cards_from_deck ts.deck 4 in
-  if Utils.is_empty options then (sps, ts)
-  else
-    let card =
-      List.init gs.number_of_tries (fun _ -> ())
-      |> List.fold_left
-           (ask_player_what_they_want_to_pick_in_deck gs sp options)
-           None
-      |> function
-      | None -> List.hd options
-      | Some c -> c
-    in
-    let sps, ts =
-      match card with
-      | Special (Menu _) | Special (TakeOutBox _) ->
-          (sps, add_action_card_to_queue action_sort_function ts sp card)
-      | Special SpecialOrder -> (sps, add_special_order_to_queue ts sp card)
-      | _ ->
-          (* I cannot simply use the function put_card_on_player_table as
-             the card is not in the player's hand and that function removes the card from the hand *)
-          ( List.map
-              (fun sp_2 ->
-                if sp.player.id = sp_2.player.id then
-                  {
-                    sp_2 with
-                    player =
-                      {
-                        sp_2.player with
-                        table = put_card_on_table card sp_2.player.table;
-                      };
-                  }
-                else sp_2)
-              sps,
-            ts )
-    in
-    ( remove_card_from_player_hand sps sp.player.id original_menu_card,
-      {
-        ts with
-        deck = remove_n_cards_of_type_from_deck ts.deck ~total_to_remove:1 card;
-      } )
-
-(** One try of asking the player what they would like to flip on their table using TakeOutBox. *)
-let ask_player_what_they_want_to_flip gs sp previous_choice _ =
-  match previous_choice with
-  | None ->
-      let c = sp.strategy.choose_cards_to_flip gs sp.player in
-      if assert_player_choices_are_in_bounds sp.player.table c then Some c
-      else None
-  | c -> c
-
-(** Given a player who chosen to play [TakeOutBox], ask them which cards they want to flip among the cards on their table. *)
-let takeout_turn game_status turn_status players player card =
-  let cards_to_flip =
-    List.init game_status.number_of_tries (fun _ -> ())
-    |> List.fold_left
-         (ask_player_what_they_want_to_flip game_status player)
-         None
-    |> function
-    | None -> []
-    | Some cards -> cards
-  in
-  let players = flip_player_cards players player.player.id cards_to_flip in
-  (remove_card_from_player_hand players player.player.id card, turn_status)
-
-let use_correctly_action_cards gs (sps, ts) (sp, c) =
-  match c with
-  | Special (Chopsticks _) -> chopsticks_turn gs ts sps sp c
-  | Special (Spoon _) -> spoon_turn gs ts sps sp c
-  | Special (Menu _) -> menu_turn gs ts sps sp c
-  | Special (TakeOutBox _) -> takeout_turn gs ts sps sp c
-  | _ -> raise (Failure "Unreachable")
-
-let remove_head = function [] -> [] | _ :: t -> t
-
-let compare_actions a1 a2 =
-  let p1 = get_priority_from_card (snd a1) in
-  let p2 = get_priority_from_card (snd a2) in
+let compare_specials sp1 sp2 =
+  let p1 = get_priority_from_card (snd sp1) in
+  let p2 = get_priority_from_card (snd sp2) in
   compare p1 p2
 
-let sort_actions ts =
+let play_special_card (player_id, card) igs =
+  let igs =
+    map_turn_status
+      (fun ts ->
+        {
+          ts with
+          played_specials = List.sort compare_specials ts.played_specials;
+        })
+      igs
+  in
+  (match CardType.card_type_of_card card with
+  | Chopsticks -> play_chopsticks player_id card igs
+  | Spoon -> play_spoon player_id card igs
+  | Menu -> play_menu player_id card igs
+  | TakeOutBox -> play_take_out_box player_id card igs
+  | _ -> raise (Failure "This should not happen, an invalid card was played"))
+  |> remove_card_from_specials player_id card
+
+let play_special_cards igs =
+  List.fold_left
+    (fun igs x -> play_special_card x igs)
+    igs igs.turn_status.played_specials
+
+let play_miso_soups igs =
+  if igs.turn_status.played_miso_soups |> List.length = 1 then
+    let player_id, card = List.hd igs.turn_status.played_miso_soups in
+    play_card player_id card igs
+  else
+    List.fold_left
+      (fun igs (player_id, card) -> remove_card_from_hand player_id card igs)
+      igs igs.turn_status.played_miso_soups
+
+(** Returns the total uramakis icons, both in cards and already on table. *)
+let count_uramakis player cards =
+  let sum_uramakis acc = function
+    | SushiRoll (Uramaki n) -> n + acc
+    | _ -> acc
+  in
+  let uramaki_icons = List.fold_left sum_uramakis 0 cards in
+  List.fold_left sum_uramakis uramaki_icons player.table
+
+let keep_countable_uramakis igs =
+  let players_and_icons =
+    List.map
+      (fun (player_id, cards) ->
+        ( player_id,
+          cards,
+          count_uramakis (find_player_with_id player_id igs) cards ))
+      igs.turn_status.played_uramakis
+  in
+  List.fold_left
+    (fun (players_to_remove_uramakis, igs) (player_id, cards, icons) ->
+      if icons >= 10 then
+        ((player_id, cards, icons) :: players_to_remove_uramakis, igs)
+      else
+        ( players_to_remove_uramakis,
+          List.fold_left
+            (fun igs card ->
+              igs
+              |> remove_card_from_hand player_id card
+              |> add_card_to_table player_id card)
+            igs cards ))
+    ([], igs) players_and_icons
+
+let add_points_to_player points player =
+  { player with score = player.score + points }
+
+let update_player_table f player = { player with table = f player.table }
+
+let update_points_and_remove_uramakis igs =
+  List.fold_left
+    (fun igs (player_id, cards, points) ->
+      let player =
+        find_player_with_id player_id igs
+        |> add_points_to_player points
+        |> update_player_table
+             (List.filter (fun c -> CardType.card_type_of_card c <> Uramaki))
+      in
+      let players =
+        List.map
+          (fun p -> if p.player.id = player_id then { p with player } else p)
+          igs.players
+      in
+      List.fold_left
+        (fun igs card -> remove_card_from_hand player_id card igs)
+        { igs with players } cards)
+    igs
+
+let play_uramakis igs =
+  let players_to_remove_uramakis, igs = keep_countable_uramakis igs in
+  List.map (fun (_, _, icons) -> icons) players_to_remove_uramakis
+  |> Points.get_positions
+  |> Points.uramaki_points ~during_round:true igs.played_uramakis
+  |> List.map2
+       (fun (player_id, cards, _) (_, points) -> (player_id, cards, points))
+       players_to_remove_uramakis
+  |> update_points_and_remove_uramakis igs
+  |> map_turn_status (fun ts -> { ts with played_uramakis = [] })
+  |> fun igs ->
   {
-    ts with
-    action_cards_to_use = List.sort compare_actions ts.action_cards_to_use;
+    igs with
+    played_uramakis =
+      igs.played_uramakis + List.length players_to_remove_uramakis;
   }
 
-(** For all actions cards placed in the queue, proceed to their associated action. *)
-let use_action_cards (gs : game_status) (sps, ts) =
-  let rec loop_over_actions (sps, ts) =
-    (* This handles priority order *)
-    let ts = sort_actions ts in
-    if Utils.is_empty ts.action_cards_to_use then (sps, ts)
-    else
-      loop_over_actions
-        (use_correctly_action_cards gs
-           ( sps,
-             {
-               ts with
-               action_cards_to_use = remove_head ts.action_cards_to_use;
-             } )
-           (List.hd ts.action_cards_to_use))
+let play_all_cards igs =
+  let rec aux igs =
+    if
+      Utils.is_empty igs.turn_status.played_cards
+      && Utils.is_empty igs.turn_status.played_specials
+    then igs
+    else igs |> play_normal_cards |> play_special_cards |> aux
   in
-  loop_over_actions (sps, ts)
-
-let increment_points (id : int) (points : Points.points)
-    (players : strategized_player list) =
-  update_player_score points
-  |> update_strategized_player_with_id id
-  |> map_strategized_players players
-
-(** Remove all occurences of Uramakis cards on a player's table. *)
-let remove_uramaki_cards (id : int) (players : strategized_player list) =
-  update_player_table (fun t ->
-      remove_n_cards_of_type t ~total_to_remove:max_int (SushiRoll (Uramaki 0)))
-  |> update_strategized_player_with_id id
-  |> map_strategized_players players
-
-(** Sum all Uramakis icons of player's Uramakis. *)
-let count_uramakis_icons player =
-  List.fold_left
-    (fun count -> function SushiRoll (Uramaki x) -> count + x | _ -> count)
-    0 player.player.table
-
-let check_uramakis (internal_game_status : internal_game_status)
-    (players, turn_status) : strategized_player list * turn_status =
-  let players_with_more_than_10_uramakis =
-    turn_status.miso_and_ura_to_place
-    |> List.filter_map (fun (p, c) ->
-           if CardType.card_type_of_card c = CardType.Uramaki then Some p
-           else None)
-    |> List.filter (fun player -> count_uramakis_icons player >= 10)
-  in
-  let players_and_positions =
-    players_with_more_than_10_uramakis
-    |> List.map (fun player -> count_uramakis_icons player)
-    |> Points.get_positions
-  in
-  Points.uramaki_points players_and_positions
-    internal_game_status.played_uramakis
-  |> List.map2
-       (fun player (_, points) -> (player, points))
-       players_with_more_than_10_uramakis
-  |> List.fold_left
-       (fun (players, ts) (player, points) ->
-         ( players
-           |> increment_points player.player.id points
-           |> remove_uramaki_cards player.player.id,
-           increment_played_uramakis_counter ts ))
-       (players, turn_status)
-
-(** One try asking a player what they would like to choose in a turn. *)
-let try_to_choose_a_first_card (gs : game_status) (sp : strategized_player)
-    player_status previous_choice _ =
-  match previous_choice with
-  | None ->
-      let choice = sp.strategy.choose_card gs player_status in
-      if assert_player_choices_are_in_bounds sp.hand [ choice ] then Some choice
-      else None
-  | c -> c
-
-(** Asks a player what they would like to play in a turn, giving them multiples tries. *)
-let ask_player_what_they_want_to_choose_first (gs : game_status)
-    (sp : strategized_player) player_status =
-  List.init gs.number_of_tries (fun _ -> ())
-  |> List.fold_left (try_to_choose_a_first_card gs sp player_status) None
-  |> function
-  | None -> sp.hand |> List.hd
-  | Some card -> card
-
-(** Given a [game_status], a [turn_status] and a [strategized_player], ask the player which card they want to play. *)
-let player_turn (gs : game_status) (ts : turn_status) (sp : strategized_player)
-    =
-  let player_status = build_player_status sp in
-  let card = ask_player_what_they_want_to_choose_first gs sp player_status in
-  match card with
-  | SushiRoll (Uramaki _) -> add_miso_ura_cards_to_queue ts sp card
-  | Appetizer MisoSoup ->
-      add_miso_ura_cards_to_queue ts sp card |> increment_miso_soup_counter
-  | Special SpecialOrder -> add_special_order_to_queue ts sp card
-  | Special (Menu _) | Special (TakeOutBox _) ->
-      add_action_card_to_queue action_sort_function ts sp card
-  | _ -> add_classic_card_to_queue ts sp card
-
-(** Given an [internal_game_status] and a function asking a player what they want to play, 
-    make all player go through the function then remove cards that cannot be played and add cards that can be played in bonus. *)
-let turn_status_based_on_what_players_want_to_play (igs : internal_game_status)
-    (make_a_player_choose_a_card :
-      turn_status -> strategized_player -> turn_status) =
-  igs.players
-  |> List.fold_left make_a_player_choose_a_card (initial_turn_status igs)
-
-(** Place all classic cards, then the Special Orders and finally all the actions. *)
-let compute_played_cards gs ts sps =
-  let sps, ts = place_classic_cards (sps, ts) |> play_special_order gs in
-  let ts = add_spoon_chopsticks_to_queue sps ts in
-  use_action_cards gs (sps, ts)
+  aux igs |> play_miso_soups |> play_uramakis
 
 (** All players give their hand to the player on their left. *)
 let pass_hands sps =
@@ -858,32 +615,54 @@ let pass_hands sps =
     in
     match sps with [] -> [] | sp :: sps -> { sp with hand = last_hand } :: sps
 
-(** Play a turn of Sushi Go Party. *)
-let play_turn ~number_of_tries (internal_game_status : internal_game_status) :
+(** Advance one turn. Nothing needs to be reset *)
+let advance_one_turn (internal_game_status : internal_game_status) :
     internal_game_status =
-  let game_status =
-    game_status_of_internal_game_status internal_game_status ~number_of_tries
-  in
-  let turn_status =
-    turn_status_based_on_what_players_want_to_play internal_game_status
-      (player_turn game_status)
-  in
-  let players, turn_status =
-    compute_played_cards game_status turn_status internal_game_status.players
-    |> check_uramakis internal_game_status
-    |> remove_excess_miso_soup
-  in
   {
     internal_game_status with
-    players = pass_hands players;
-    played_uramakis =
-      internal_game_status.played_uramakis + turn_status.played_uramakis;
-    total_special_order_copying_desserts =
-      internal_game_status.total_special_order_copying_desserts
-      + turn_status.special_order_copying_desserts;
-    deck = turn_status.deck;
+    current_turn = internal_game_status.current_turn + 1;
+    turn_status = initial_turn_status;
   }
-  |> advance_one_turn
+
+let get_cards_to_play igs =
+  List.fold_left
+    (fun igs splayer ->
+      let gs = game_status_of_internal_game_status igs in
+      let ps = player_status_of_strategized_player splayer in
+      let card =
+        splayer.strategy.choose_card gs ps
+        |> validate_card_in_hand splayer.player.id igs
+      in
+      sort_card splayer.player.id card igs)
+    igs igs.players
+
+let add_spoon_and_chopsticks_to_play igs =
+  let playing_spoons =
+    List.fold_left
+      (fun spoons splayer ->
+        List.fold_left
+          (fun spoons card ->
+            if
+              CardType.card_type_of_card card = Spoon
+              || CardType.card_type_of_card card = Chopsticks
+            then (splayer.player.id, card) :: spoons
+            else spoons)
+          spoons splayer.player.table)
+      [] igs.players
+  in
+  {
+    igs with
+    turn_status =
+      {
+        igs.turn_status with
+        played_specials = playing_spoons @ igs.turn_status.played_specials;
+      };
+  }
+
+(** Play a turn of Sushi Go Party. *)
+let play_turn (internal_game_status : internal_game_status) =
+  internal_game_status |> add_spoon_and_chopsticks_to_play |> get_cards_to_play
+  |> play_all_cards |> map_sps pass_hands
 
 (** Advance one round. They current turn is reset to 1. *)
 let advance_one_round (internal_game_status : internal_game_status) :
@@ -892,7 +671,21 @@ let advance_one_round (internal_game_status : internal_game_status) :
     internal_game_status with
     players =
       List.map
-        (fun p -> { p with hand = []; player = { p.player with table = [] } })
+        (fun p ->
+          {
+            p with
+            hand = [];
+            player =
+              {
+                p.player with
+                desserts =
+                  p.player.desserts
+                  @ List.filter_map
+                      (function Dessert d -> Some d | _ -> None)
+                      p.player.table;
+                table = [];
+              };
+          })
         internal_game_status.players;
     current_round = internal_game_status.current_round + 1;
     current_turn = 1;
@@ -910,12 +703,7 @@ let extract_strategized_players (players : strategized_player list) =
 
 (** Remove player with a certain id in a list of players *)
 let remove_player_with_id players id =
-  List.filter (fun player -> player.id != id) players
-
-(** Find a player with a certain id in a list of players 
-   @raise Not_found if no players have that id *)
-let find_player_with_id players id =
-  List.find (fun player -> player.id = id) players
+  List.filter (fun player -> player.id <> id) players
 
 (** Reforms [strategized_player list] from [player list] and [strategized_player list] 
     @raise Invalid_argument when list have not the same length.
@@ -923,7 +711,10 @@ let find_player_with_id players id =
     *)
 let zip_to_strategized_players (players : player list)
     (strategized_players : strategized_player list) : strategized_player list =
-  if List.length players != List.length strategized_players then
+  let find_player_with_id players id =
+    List.find (fun player -> player.id = id) players
+  in
+  if List.length players <> List.length strategized_players then
     raise (Invalid_argument "List should have the same length")
   else
     List.fold_left_map
@@ -973,19 +764,17 @@ let deal_cards_at_start (internal_game_status : internal_game_status) =
   { internal_game_status with players; deck }
 
 (** Play a round of Sushi Go Party. *)
-let play_round (internal_game_status : internal_game_status) ~number_of_tries :
+let play_round (internal_game_status : internal_game_status) :
     internal_game_status =
   let number_of_turns =
     number_of_cards_to_deal
       ~nb_players:(List.length internal_game_status.players)
   in
-  let rec round_loop (internal_game_status : internal_game_status) =
-    if internal_game_status.current_turn > number_of_turns then
-      internal_game_status
-    else play_turn ~number_of_tries internal_game_status |> round_loop
-  in
-  deal_cards_at_start internal_game_status
-  |> round_loop |> compute_points_round |> advance_one_round
+  List.init number_of_turns (fun _ -> ())
+  |> List.fold_left
+       (fun acc _ -> acc |> play_turn |> advance_one_turn)
+       (deal_cards_at_start internal_game_status)
+  |> compute_points_round |> advance_one_round
 
 (** Compares the scores of two players. If they have the same score, we compare the number of desserts they have. *)
 let compare_players_score p1 p2 =
@@ -1009,13 +798,10 @@ let game_ending_of_player_list players =
   { winners = win; players = List.map decompose_player players }
 
 (** From a  given [game_settings], this function plays a game of Sushi Go Party. *)
-let arena ?(number_of_tries = 3) (game_settings : game_settings) =
+let arena (game_settings : game_settings) =
   let internal_game_status = initial_game_status game_settings in
-  let rec loop (internal_game_status : internal_game_status) =
-    if internal_game_status.current_round > 3 then internal_game_status
-    else play_round internal_game_status ~number_of_tries |> loop
-  in
-  let post_rounds_internal_game_status = loop internal_game_status in
-  post_rounds_internal_game_status.players
+  List.init 3 (fun _ -> ())
+  |> List.fold_left (fun acc _ -> acc |> play_round) internal_game_status
+  |> (fun x -> x.players)
   |> List.map (fun { player; _ } -> player)
   |> Points.count_dessert_points |> game_ending_of_player_list

@@ -137,6 +137,7 @@ module CardType : sig
     | MatchaIceCream
     | Fruit
     | Pudding
+    | FaceDown
 
   val equal : t -> t -> bool
   val pp : Format.formatter -> t -> unit

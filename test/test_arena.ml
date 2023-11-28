@@ -671,10 +671,50 @@ let hand_is_full_on_turn_1 =
   in
   test_strategy "Hand is full on turn 1" mock_assert_full_hand
 
+let test_play_special_menu_card_informations_menu =
+  (Maki 0, Tempura, Sashimi, Tofu, Menu 0, SoySauce, Fruit [])
+
+let test_play_special_menu_card_players =
+  List.init 2 (fun i ->
+      [
+        Special (Menu (7 + i));
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+        Appetizer Tempura;
+      ])
+  |> players_from_hand_list first_pick_strategy
+
+let test_play_special_menu_card_internal_game_status =
+  default_internal_game_status test_play_special_menu_card_informations_menu
+    test_play_special_menu_card_players
+
+let use_menu_card () =
+  Alcotest.test_case
+    "The special menu card does not have a card after being played" `Quick
+    (fun () ->
+      Alcotest.(check bool)
+        "same result" true
+        (let new_game_status =
+           play_turn ~number_of_tries:20
+             test_play_special_menu_card_internal_game_status
+         in
+         List.for_all
+           (fun p ->
+             let p = p.player in
+             List.length p.desserts + List.length p.table = 1)
+           new_game_status.players))
+
 let () =
   let open Alcotest in
   run "Arena"
     [
+      ("use_menu_card", [ use_menu_card () ]);
       ( "Game Initialization",
         [
           test_case "No players raises an exception" `Quick (fun () ->

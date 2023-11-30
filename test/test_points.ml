@@ -101,6 +101,9 @@ let test_dessert_symmetry =
       in
       List.sort compare points = List.sort compare points')
 
+let test_count_dessert_points () =
+  Alcotest.(check bool) "Same result" true (count_dessert_points [] = [])
+
 let () =
   let open Alcotest in
   run "Points"
@@ -972,5 +975,10 @@ let () =
                   Fruit [ Watermelon; Orange ];
                 ];
               ] );
+        ] );
+      ( "count_dessert_points",
+        [
+          test_case "test count_dessert_points with empty list" `Quick
+            test_count_dessert_points;
         ] );
     ]

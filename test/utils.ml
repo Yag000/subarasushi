@@ -349,32 +349,29 @@ let generator_internal_game_status strategy menu =
              (fun acc p -> min acc (List.length p.table))
              0 players)
       in
-      {
-        players =
-          List.mapi
-            (fun i p ->
-              let table =
-                List.filter (fun c -> is_in_menu c menu_list) p.table
-              in
-              let nb_cards_to_remove = List.length p.table - min_table_size in
-              let table =
-                List.filteri (fun i _ -> i >= nb_cards_to_remove) table
-              in
-              let hand = List.nth hands i in
-              let nb_cards_to_remove = List.length hand - hand_size in
-              let hand =
-                List.filteri (fun i _ -> i >= nb_cards_to_remove) hand
-              in
-              { player = { p with table; id = i }; strategy; hand })
-            players;
-        played_uramakis;
-        total_special_order_copying_desserts;
-        current_round;
-        current_turn;
-        deck = create_deck menu;
-        menu;
-        turn_status = initial_turn_status;
-      })
+      let players =
+        List.mapi
+          (fun i p ->
+            let table = List.filter (fun c -> is_in_menu c menu_list) p.table in
+            let nb_cards_to_remove = List.length table - min_table_size in
+            let table =
+              List.filteri (fun i _ -> i >= nb_cards_to_remove) table
+            in
+            let hand = List.nth hands i in
+            let nb_cards_to_remove = List.length hand - hand_size in
+            let hand = List.filteri (fun i _ -> i >= nb_cards_to_remove) hand in
+            { player = { p with table; id = i }; strategy; hand })
+          players
+      in
+      match
+        construct_internal_game_status players ~played_uramakis
+          ~total_special_order_copying_desserts ~current_round ~current_turn
+          menu
+      with
+      | Some status -> status
+      | _ ->
+          raise
+            (Invalid_argument "The internal game status could not be created"))
     (Gen.tup6
        (Gen.list_size (Gen.int_range 3 6) generator_player)
        (Gen.list_size (Gen.return 8)
@@ -382,19 +379,24 @@ let generator_internal_game_status strategy menu =
        (Gen.int_range 0 3) (Gen.int_range 0 6) (Gen.int_range 1 3)
        (Gen.int_range 1 3))
 
-let pp_internal_game_status ff game_status =
-  let players = List.map (fun p -> p.player) game_status.players in
-  let hands = List.map (fun p -> p.hand) game_status.players in
+let pp_internal_game_status ff internal_game_status =
+  let players =
+    List.map
+      (fun p -> p.player)
+      (get_players_from_internal_game_status internal_game_status)
+  in
+  let hands =
+    List.map
+      (fun p -> p.hand)
+      (get_players_from_internal_game_status internal_game_status)
+  in
+  let game_status = game_status_of_internal_game_status internal_game_status in
   Format.fprintf ff "Current round: %d@." game_status.current_round;
   Format.fprintf ff "Current turn: %d@." game_status.current_turn;
   Format.fprintf ff "players: %a@." pp_player_list players;
   Format.fprintf ff "Hands: [@[<hov>%a@]]@."
     Format.(pp_print_list ~pp_sep:pp_print_space pp_hand)
     hands;
-  Format.fprintf ff "Played uramakis: %d@." game_status.played_uramakis;
-  Format.fprintf ff "Total special order copying desserts: %d@."
-    game_status.total_special_order_copying_desserts;
-  Format.fprintf ff "Deck: %a@." pp_deck game_status.deck;
   Format.fprintf ff "Menu: %a@." pp_menu game_status.menu
 
 let arbitrary_internal_game_status ?(menu = menu_of_default_menu PartySampler)

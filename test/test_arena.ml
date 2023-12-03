@@ -292,16 +292,10 @@ let points_are_never_lower_than_the_minimun_possible_score =
 let decompose_player player = (player.name, player.score)
 
 let default_internal_game_status menu players =
-  {
-    players;
-    deck = create_deck menu;
-    menu;
-    played_uramakis = 0;
-    current_turn = 1;
-    current_round = 1;
-    total_special_order_copying_desserts = 0;
-    turn_status = initial_turn_status;
-  }
+  match construct_internal_game_status players menu with
+  | Some status -> status
+  | _ ->
+      raise (Invalid_argument "The internal game status could not be created")
 
 let players_from_hand_list strategy hand_list =
   List.mapi
@@ -354,7 +348,8 @@ let test_card_is_at_pos_i ?(turn_amount = 1) pos card strat =
   in
   Alcotest.(check bool)
     "same" true
-    (List.mem card (List.nth game_status.players pos).hand)
+    (List.mem card
+       (List.nth (get_players_from_internal_game_status game_status) pos).hand)
 
 let test_spoon_choices_are_always_of_same_type_but_different =
   let mock_play_spoon =
@@ -391,7 +386,9 @@ let turn_play_test ?(turn_amount = 1) menu hand_strat
   List.init turn_amount (fun _ -> ())
   |> List.fold_left (fun game_status _ -> play_turn game_status) game_status
   |> fun x ->
-  x.players |> List.map (fun player -> player.player) |> test_function
+  get_players_from_internal_game_status x
+  |> List.map (fun player -> player.player)
+  |> test_function
 
 let turn_play_miso_test ?(turn_amount = 1) hand_strat expected_hands =
   List.iter2
@@ -437,7 +434,9 @@ let use_miso_soup_card =
            repeat test_play_misosoup_card_internal_game_status 9
          in
          let () = Format.printf "%a" pp_internal_game_status new_game_status in
-         List.for_all (fun p -> List.length p.hand == 0) new_game_status.players))
+         List.for_all
+           (fun p -> List.length p.hand == 0)
+           (get_players_from_internal_game_status new_game_status)))
 
 let turn_play_uramaki_test ?(turn_amount = 1) hand_strat expected_hands =
   List.iter2
@@ -472,26 +471,30 @@ let hand_size_reduces_after_each_turn =
   Test.make ~count:100 ~name:"Hand size reduces after each turn"
     (arbitrary_internal_game_status first_pick_strategy) (fun game_status ->
       let original_hand_size =
-        List.hd game_status.players |> fun player -> List.length player.hand
+        List.hd (get_players_from_internal_game_status game_status)
+        |> fun player -> List.length player.hand
       in
       let new_game_status = play_turn game_status in
       List.for_all
         (fun player -> List.length player.hand = original_hand_size - 1)
-        new_game_status.players)
+        (get_players_from_internal_game_status new_game_status))
 
 let table_size_is_at_most_one_bigger_after_each_turn =
   let open QCheck in
   Test.make ~count:100 ~name:"Table size is at most one bigger after each turn"
     (arbitrary_internal_game_status first_pick_strategy) (fun game_status ->
       let original_sizes =
-        List.map (fun p -> List.length p.player.table) game_status.players
+        List.map
+          (fun p -> List.length p.player.table)
+          (get_players_from_internal_game_status game_status)
       in
       let new_game_status = play_turn game_status in
       List.for_all2
         (fun player original_size ->
           let new_table_size = List.length player.player.table in
           new_table_size <= original_size + 1)
-        new_game_status.players original_sizes)
+        (get_players_from_internal_game_status new_game_status)
+        original_sizes)
 
 let for_all_i f l =
   let rec fai i = function [] -> true | h :: t -> f i h && fai (i + 1) t in
@@ -501,9 +504,15 @@ let test_pass_hands =
   let open QCheck in
   Test.make ~count:5000 ~name:"Players give correctly their hands"
     (arbitrary_internal_game_status first_pick_strategy) (fun game_status ->
-      let origin_table = List.map (fun p -> p.hand) game_status.players in
+      let origin_table =
+        List.map
+          (fun p -> p.hand)
+          (get_players_from_internal_game_status game_status)
+      in
       let passed_table =
-        List.map (fun p -> p.hand) (pass_hands game_status.players)
+        List.map
+          (fun p -> p.hand)
+          (pass_hands (get_players_from_internal_game_status game_status))
       in
       match List.rev origin_table with
       | [] -> true
@@ -516,7 +525,11 @@ let test_pass_hands =
 let test_generator_internal_game_status =
   let open QCheck in
   Test.make ~count:100 ~name:"Generator generates properly"
-    (arbitrary_internal_game_status first_pick_strategy) (fun game_status ->
+    (arbitrary_internal_game_status first_pick_strategy)
+    (fun internal_game_status ->
+      let game_status =
+        game_status_of_internal_game_status internal_game_status
+      in
       let hand_size =
         number_of_cards_to_deal ~nb_players:(List.length game_status.players)
         - game_status.current_turn + 1
@@ -527,7 +540,7 @@ let test_generator_internal_game_status =
           List.length player.hand = hand_size
           && List.for_all (fun x -> is_in_menu x menu_list) player.hand
           && List.for_all (fun x -> is_in_menu x menu_list) player.player.table)
-        game_status.players)
+        (get_players_from_internal_game_status internal_game_status))
 
 let face_down_can_face_dow_all_cards =
   let mock_take_out_box = mock_prioritize_one_card_type CardType.TakeOutBox in
@@ -554,7 +567,8 @@ let face_down_can_face_dow_all_cards =
             && List.length player.player.table
                = List.length old_player.player.table
           else true)
-        new_game_status.players game_status.players)
+        (get_players_from_internal_game_status new_game_status)
+        (get_players_from_internal_game_status game_status))
 
 let can_face_down_face_down_cards =
   let mock_take_out_box = mock_prioritize_one_card_type CardType.TakeOutBox in
@@ -569,7 +583,7 @@ let can_face_down_face_down_cards =
     (arbitrary_internal_game_status
        ~menu:(menu_of_default_menu MasterMenu)
        mock_take_out_box)
-    (fun game_status ->
+    (fun internal_game_status ->
       let players =
         List.map
           (fun p ->
@@ -585,10 +599,22 @@ let can_face_down_face_down_cards =
                          | x -> FaceDown x);
                 };
             })
-          game_status.players
+          (get_players_from_internal_game_status internal_game_status)
       in
-      let game_status = { game_status with players } in
-      let new_game_status = play_turn game_status in
+      let internal_game_status =
+        let game_status =
+          game_status_of_internal_game_status internal_game_status
+        in
+        match
+          construct_internal_game_status players
+            ~current_round:game_status.current_round
+            ~current_turn:game_status.current_turn game_status.menu
+        with
+        | Some status -> status
+        | _ ->
+            raise (Invalid_argument "Could not construct internal game status")
+      in
+      let new_internal_game_status = play_turn internal_game_status in
       List.for_all2
         (fun player old_player ->
           if
@@ -602,7 +628,8 @@ let can_face_down_face_down_cards =
             && player.player.table |> List.length
                = (old_player.player.table |> List.length)
           else true)
-        new_game_status.players game_status.players)
+        (get_players_from_internal_game_status new_internal_game_status)
+        (get_players_from_internal_game_status internal_game_status))
 
 let is_card_instant_placed = function
   | Special (Menu _)
@@ -634,18 +661,27 @@ let test_card_placed_implies_not_in_hand =
     (arbitrary_internal_game_status
        ~menu:(menu_of_default_menu MasterMenu)
        keep_track_of_playing_cards)
-    (fun game_status ->
+    (fun internal_game_status ->
       ref_cards_to_play := [];
-      let game_status =
-        {
-          game_status with
-          players =
-            List.map
-              (fun p -> { p with player = { p.player with table = [] } })
-              game_status.players;
-        }
+      let internal_game_status =
+        let players =
+          List.map
+            (fun p -> { p with player = { p.player with table = [] } })
+            (get_players_from_internal_game_status internal_game_status)
+        in
+        let game_status =
+          game_status_of_internal_game_status internal_game_status
+        in
+        match
+          construct_internal_game_status players
+            ~current_round:game_status.current_round
+            ~current_turn:game_status.current_turn game_status.menu
+        with
+        | Some status -> status
+        | _ ->
+            raise (Invalid_argument "Could not construct internal game status")
       in
-      let next_game_status = play_turn game_status in
+      let next_game_status = play_turn internal_game_status in
       List.for_all2
         (fun played_card player ->
           let player_table = player.player.table in
@@ -653,7 +689,7 @@ let test_card_placed_implies_not_in_hand =
             List.mem played_card player_table
           else true)
         (!ref_cards_to_play |> List.rev)
-        next_game_status.players)
+        (get_players_from_internal_game_status next_game_status))
 
 let test_copied_hand_is_placed =
   (* This should be illegal, I am afraid of what I have become *)
@@ -683,8 +719,11 @@ let test_copied_hand_is_placed =
           else
             List.for_all (fun card -> List.mem card player_table) copied_cards)
         (Array.to_list cards_to_copy
-        |> List.filteri (fun i _ -> i < List.length game_status.players))
-        next_game_status.players)
+        |> List.filteri (fun i _ ->
+               i
+               < List.length (get_players_from_internal_game_status game_status))
+        )
+        (get_players_from_internal_game_status next_game_status))
 
 let table_is_empty_on_turn_1 =
   let mock_assert_empty_hand =
@@ -755,13 +794,13 @@ let use_menu_card =
            (fun p ->
              let p = p.player in
              List.length p.desserts + List.length p.table = 1)
-           new_game_status.players))
+           (get_players_from_internal_game_status new_game_status)))
 
 let test_play_turn_informations_menu =
   (Maki 0, Tempura, Sashimi, Tofu, Menu 0, SoySauce, Fruit [])
 
 let test_play_turn_players =
-  List.init 7 (fun _ ->
+  List.init 6 (fun _ ->
       [
         Dessert (Fruit [ Watermelon; Watermelon ]);
         Appetizer Tempura;
@@ -796,7 +835,104 @@ let test_play_turn =
                ]
              && p.player.desserts = []
              && p.player.table = [ Dessert (Fruit [ Watermelon; Watermelon ]) ])
-           new_game_status.players))
+           (get_players_from_internal_game_status new_game_status)))
+
+let test_internal_game_status_construction ?(correct = true) igs =
+  Alcotest.(check bool)
+    "same result" true
+    ((if correct then ( <> ) else ( = )) igs None)
+
+let test_construct_wrong_status_not_enough_players menu () =
+  construct_internal_game_status [] menu
+  |> test_internal_game_status_construction ~correct:false
+
+let test_construct_wrong_status_too_much_players menu () =
+  construct_internal_game_status
+    (List.init 12 (fun _ -> []) |> players_from_hand_list first_pick_strategy)
+    menu
+  |> test_internal_game_status_construction ~correct:false
+
+let test_construct_correct_status_players menu () =
+  construct_internal_game_status test_play_turn_players menu
+  |> test_internal_game_status_construction
+
+let test_construct_wrong_status_played_uramakis menu () =
+  construct_internal_game_status test_play_turn_players ~played_uramakis:(-1)
+    menu
+  |> test_internal_game_status_construction ~correct:false
+
+let test_construct_correct_status_played_uramakis menu () =
+  construct_internal_game_status test_play_turn_players ~played_uramakis:12 menu
+  |> test_internal_game_status_construction
+
+let test_construct_wrong_status_specials_order menu () =
+  construct_internal_game_status test_play_turn_players
+    ~total_special_order_copying_desserts:(-15) menu
+  |> test_internal_game_status_construction ~correct:false
+
+let test_construct_correct_status_specials_order menu () =
+  construct_internal_game_status test_play_turn_players
+    ~total_special_order_copying_desserts:4 menu
+  |> test_internal_game_status_construction
+
+let test_construct_wrong_status_round_lt_0 menu () =
+  construct_internal_game_status test_play_turn_players ~current_round:(-1) menu
+  |> test_internal_game_status_construction ~correct:false
+
+let test_construct_wrong_status_round_gt_3 menu () =
+  construct_internal_game_status test_play_turn_players ~current_round:4 menu
+  |> test_internal_game_status_construction ~correct:false
+
+let test_construct_correct_status_round menu () =
+  construct_internal_game_status test_play_turn_players ~current_round:3 menu
+  |> test_internal_game_status_construction
+
+let test_construct_wrong_status_turn_lt_0 menu () =
+  construct_internal_game_status test_play_turn_players ~current_turn:(-1) menu
+  |> test_internal_game_status_construction ~correct:false
+
+let test_construct_wrong_status_turn_gt_cards menu () =
+  construct_internal_game_status test_play_turn_players ~current_turn:24 menu
+  |> test_internal_game_status_construction ~correct:false
+
+let test_construct_correct_status_turn menu () =
+  construct_internal_game_status test_play_turn_players ~current_turn:3 menu
+  |> test_internal_game_status_construction
+
+let test_construct_wrong_status =
+  let open Alcotest in
+  let menu = menu_of_default_menu MyFirstMeal in
+  [
+    test_case "Creating a faulted internal_game_status | Not enough players"
+      `Quick
+      (test_construct_wrong_status_not_enough_players menu);
+    test_case "Creating a faulted internal_game_status | Too much players"
+      `Quick
+      (test_construct_wrong_status_too_much_players menu);
+    test_case "Creating a correct internal_game_status | Players" `Quick
+      (test_construct_correct_status_players menu);
+    test_case "Creating a faulted internal_game_status | Uramakis" `Quick
+      (test_construct_wrong_status_played_uramakis menu);
+    test_case "Creating a faulted internal_game_status | Uramakis" `Quick
+      (test_construct_correct_status_played_uramakis menu);
+    test_case "Creating a faulted internal_game_status | Special Orders" `Quick
+      (test_construct_wrong_status_specials_order menu);
+    test_case "Creating a correct internal_game_status | Special Orders" `Quick
+      (test_construct_correct_status_specials_order menu);
+    test_case "Creating a correct internal_game_status | Round" `Quick
+      (test_construct_correct_status_round menu);
+    test_case "Creating a faulted internal_game_status | Round < 0" `Quick
+      (test_construct_wrong_status_round_lt_0 menu);
+    test_case "Creating a faulted internal_game_status | Round > 3" `Quick
+      (test_construct_wrong_status_round_gt_3 menu);
+    test_case "Creating a faulted internal_game_status | Turn < 0" `Quick
+      (test_construct_wrong_status_turn_lt_0 menu);
+    test_case "Creating a faulted internal_game_status | Turn > cards to deals"
+      `Quick
+      (test_construct_wrong_status_turn_gt_cards menu);
+    test_case "Creating a correct internal_game_status | Turn" `Quick
+      (test_construct_correct_status_turn menu);
+  ]
 
 let () =
   let open Alcotest in
@@ -1178,10 +1314,19 @@ let () =
               in
               let new_game_status = play_turn game_status in
               Alcotest.(check (list card_testable))
-                "same" [] (List.nth new_game_status.players 0).player.table;
+                "same" []
+                (List.nth
+                   (get_players_from_internal_game_status new_game_status)
+                   0)
+                  .player
+                  .table;
               Alcotest.(check (list card_testable))
                 "same" [ Nigiri Egg ]
-                (List.nth new_game_status.players 1).player.table);
+                (List.nth
+                   (get_players_from_internal_game_status new_game_status)
+                   1)
+                  .player
+                  .table);
         ] );
       ("use_menu_card", [ use_menu_card ]);
       ( "SpecialOrder",
@@ -1204,8 +1349,14 @@ let () =
                      (menu_of_default_menu PointsPlatter)
                 |> play_turn
               in
-              let first_player = List.hd new_game_status.players in
-              let second_player = List.nth new_game_status.players 1 in
+              let first_player =
+                List.hd (get_players_from_internal_game_status new_game_status)
+              in
+              let second_player =
+                List.nth
+                  (get_players_from_internal_game_status new_game_status)
+                  1
+              in
               Alcotest.(check (list card_testable))
                 "same" [ Special SpecialOrder ] first_player.player.table;
               Alcotest.(check bool)
@@ -1234,4 +1385,5 @@ let () =
       ( "Game generator",
         [ QCheck_alcotest.to_alcotest test_generator_internal_game_status ] );
       (" Pass hands", [ QCheck_alcotest.to_alcotest test_pass_hands ]);
+      ("Test wrong game status", test_construct_wrong_status);
     ]

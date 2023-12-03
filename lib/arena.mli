@@ -96,20 +96,29 @@ type turn_status = {
 val initial_turn_status : turn_status
 (** Initial turn status. *)
 
-type internal_game_status = {
-  players : strategized_player list;
-  played_uramakis : int;
-  total_special_order_copying_desserts : int;
-  current_round : int;
-  current_turn : int;
-  deck : deck;
-  menu : menu;
-  turn_status : turn_status;
-}
+type internal_game_status
 (** Current game status. This contains the details needed to
     compute the next game status. This information is private and a
     public counterpart is given by [game_status]. It should only be 
     used for testing purposes. *)
+
+val construct_internal_game_status :
+  strategized_player list ->
+  ?played_uramakis:int ->
+  ?total_special_order_copying_desserts:int ->
+  ?current_round:int ->
+  ?current_turn:int ->
+  menu ->
+  internal_game_status option
+(** Construct the internal_game_status*)
+
+val get_players_from_internal_game_status :
+  internal_game_status -> strategized_player list
+(** Returns the list of players*)
+
+val game_status_of_internal_game_status : internal_game_status -> game_status
+(** Quick conversion from [internal_game_status] to [game_status]. Should
+    be used to give players information about the game. *)
 
 val pass_hands : strategized_player list -> strategized_player list
 (** All players give their hand to the player on their left. *)

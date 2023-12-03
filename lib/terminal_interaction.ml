@@ -366,7 +366,7 @@ let get_player_name i =
 
 (** Returns the list of players, with the firsts being human (if 
     applicable), the rest being bots. *)
-let get_players () =
+let get_players_from_internal_game_status () =
   let player_number_info = request_number_of_players () in
   let names =
     List.init player_number_info.num_players (fun i ->
@@ -498,7 +498,7 @@ let rec choose_menu total_player_number =
 (** [get_game_settings ()] prompts the user for the game settings. *)
 let get_game_settings () =
   greet_user ();
-  let players = get_players () in
+  let players = get_players_from_internal_game_status () in
   let total_player_number = List.length players in
   let menu = choose_menu total_player_number in
   { players; menu }

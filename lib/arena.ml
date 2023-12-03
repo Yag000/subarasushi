@@ -105,6 +105,10 @@ type internal_game_status = {
     See [game_status_of_internal_game_status] for more details.
     *)
 
+(** Returns the list of players*)
+let get_players_from_internal_game_status internal_game_status =
+  internal_game_status.players
+
 (** Quick conversion from [internal_game_status] to [game_status]. Should
     be used to give players information about the game. *)
 let game_status_of_internal_game_status internal_game_status =
@@ -131,6 +135,60 @@ let initial_turn_status =
     played_miso_soups = [];
     played_uramakis = [];
   }
+
+(** Check if the menu contains illegal cards :
+      - Special Order or Menu for 7-8 players game
+      *)
+let menu_contains_illegal_cards_for_nb_of_players menu nb_players =
+  let _, _, _, _, sp1, sp2, _ = menu in
+  match (sp1, sp2) with
+  | Menu _, _ | _, Menu _ | SpecialOrder, _ | _, SpecialOrder -> nb_players > 6
+  | _ -> false
+
+(** Construct the [internal_game_status]*)
+let construct_internal_game_status players ?(played_uramakis = 0)
+    ?(total_special_order_copying_desserts = 0) ?(current_round = 1)
+    ?(current_turn = 1) menu =
+  let nb_players = List.length players in
+  if nb_players > 8 || nb_players < 2 then None
+  else
+    let hand_size = List.length (List.nth players 0).hand in
+    if
+      menu_contains_illegal_cards_for_nb_of_players menu nb_players
+      || current_round < 1 || current_round > 3 || current_turn < 1
+      || current_turn > number_of_cards_to_deal ~nb_players
+      || (not
+            (List.for_all (fun pl -> List.length pl.hand = hand_size) players))
+      || played_uramakis < 0
+      || total_special_order_copying_desserts < 0
+    then None
+    else
+      Some
+        {
+          players =
+            List.mapi
+              (fun i pl ->
+                {
+                  player =
+                    {
+                      name = pl.player.name;
+                      id = i;
+                      score = pl.player.score;
+                      desserts = pl.player.desserts;
+                      table = pl.player.table;
+                    };
+                  hand = pl.hand;
+                  strategy = pl.strategy;
+                })
+              players;
+          played_uramakis;
+          total_special_order_copying_desserts;
+          current_round;
+          current_turn;
+          deck = create_deck menu;
+          menu;
+          turn_status = initial_turn_status;
+        }
 
 (** Initializes an [internal_game_status] from [game_settings]. 
     @raise Invalid_argument if there are not enough or too many players. *)

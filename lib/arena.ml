@@ -844,16 +844,18 @@ let decompose_player player = (player.name, player.score)
 
 (** Computes the points for each player and returns a [game_ending] with the winners and the players sorted by score. *)
 let game_ending_of_player_list players =
-  let players = List.sort compare_players_score players in
-  let first_player = List.hd players in
-  let winners =
-    List.filter (fun p -> compare p first_player = 0) players
-    |> List.map decompose_player
-  in
-  let win =
-    if List.length winners = 1 then Single (List.hd winners) else Draw winners
-  in
-  { winners = win; players = List.map decompose_player players }
+  if players = [] then { winners = Draw []; players = [] }
+  else
+    let players = List.sort compare_players_score players in
+    let first_player = List.hd players in
+    let winners =
+      List.filter (fun p -> compare p first_player = 0) players
+      |> List.map decompose_player
+    in
+    let win =
+      if List.length winners = 1 then Single (List.hd winners) else Draw winners
+    in
+    { winners = win; players = List.map decompose_player players }
 
 (** From a  given [game_settings], this function plays a game of Sushi Go Party. *)
 let arena (game_settings : game_settings) =

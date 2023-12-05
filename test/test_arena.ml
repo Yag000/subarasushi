@@ -758,6 +758,11 @@ let hand_is_full_on_turn_1 =
   in
   test_strategy "Hand is full on turn 1" mock_assert_full_hand
 
+let test_game_ending_of_player_list () =
+  Alcotest.(check bool)
+    "Same result" true
+    (game_ending_of_player_list [] = { winners = Draw []; players = [] })
+
 let test_play_special_menu_card_informations_menu =
   (Maki 0, Tempura, Sashimi, Tofu, Menu 0, SoySauce, Fruit [])
 
@@ -1385,5 +1390,10 @@ let () =
       ( "Game generator",
         [ QCheck_alcotest.to_alcotest test_generator_internal_game_status ] );
       (" Pass hands", [ QCheck_alcotest.to_alcotest test_pass_hands ]);
+      ( "player_list_of_game_ending",
+        [
+          test_case "game_ending_of_player_list with empty list" `Quick
+            test_game_ending_of_player_list;
+        ] );
       ("Test wrong game status", test_construct_wrong_status);
     ]

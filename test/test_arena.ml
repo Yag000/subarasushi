@@ -164,7 +164,7 @@ let menu_breaks_game menu player_number =
 
 let win_data_is_accurate =
   let open QCheck in
-  Test.make ~count:100 ~name:"Game ending data is accurate"
+  Test.make ~count:1000 ~name:"Game ending data is accurate"
     (pair (int_range 2 8) arbitrary_menu)
     (fun (nb_players, menu) ->
       let game_settings =
@@ -229,7 +229,7 @@ let correct_number_of_turns =
     }
   in
   let open QCheck in
-  Test.make ~count:100 ~name:"Number of turns is correct"
+  Test.make ~count:1000 ~name:"Number of turns is correct"
     (pair (int_range 2 8) arbitrary_menu)
     (fun (nb_players, menu) ->
       ref_total_turns := 0;
@@ -352,31 +352,57 @@ let test_card_is_at_pos_i ?(turn_amount = 1) pos card strat =
        (List.nth (get_players_from_internal_game_status game_status) pos).hand)
 
 let test_spoon_choices_are_always_of_same_type_but_different =
-  let mock_play_spoon =
-    {
-      first_pick_strategy with
-      choose_card = (mock_prioritize_one_card (Special (Spoon 4))).choose_card;
-      play_spoon = (fun _ _ -> Some (Generic Nigiri));
-      choose_card_to_give =
-        (fun _ _ ~options ->
-          match options with
-          | [] -> failwith "Empty options"
-          | h :: t ->
-              if
-                List.for_all
-                  (fun card ->
-                    CardType.card_type_of_card h
-                    = CardType.card_type_of_card card)
-                  t
-              then
-                if partition_list ( = ) (h :: t) |> List.length > 1 then h
-                else raise (MockTestException "All cards are equal")
-              else raise (MockTestException "Not all cards are of same type"));
-    }
-  in
-  test_strategy ~min_player_numer:3
-    "Spoon choices are always of same type but have atleast 2 different values"
-    mock_play_spoon
+  {
+    first_pick_strategy with
+    choose_card = (mock_prioritize_one_card (Special (Spoon 4))).choose_card;
+    play_spoon = (fun _ _ -> Some (Generic Nigiri));
+    choose_card_to_give =
+      (fun _ _ ~options ->
+        match options with
+        | [] -> failwith "Empty options"
+        | h :: t ->
+            if
+              List.for_all
+                (fun card ->
+                  CardType.card_type_of_card h = CardType.card_type_of_card card)
+                t
+            then
+              if partition_list ( = ) (h :: t) |> List.length > 1 then h
+              else raise (MockTestException "All cards are equal")
+            else raise (MockTestException "Not all cards are of same type"));
+  }
+  |> test_strategy ~min_player_numer:3
+       "Spoon choices are always of same type but have atleast 2 different \
+        values"
+
+let test_chopsticks_are_ignored_on_last_turn =
+  {
+    first_pick_strategy with
+    choose_card =
+      (mock_prioritize_one_card_type CardType.Chopsticks).choose_card;
+    play_chopsticks =
+      (fun gs _ ->
+        if
+          gs.current_turn
+          = number_of_cards_to_deal ~nb_players:(List.length gs.players)
+        then raise (MockTestException "Chopsticks are not ignored")
+        else None);
+  }
+  |> test_strategy ~min_player_numer:2 "Chopsticks are ignored on last turn"
+
+let test_spoon_is_ignored_on_last_turn =
+  {
+    first_pick_strategy with
+    choose_card = (mock_prioritize_one_card_type CardType.Spoon).choose_card;
+    play_spoon =
+      (fun gs _ ->
+        if
+          gs.current_turn
+          = number_of_cards_to_deal ~nb_players:(List.length gs.players)
+        then raise (MockTestException "Spoon is not ignored")
+        else None);
+  }
+  |> test_strategy ~min_player_numer:3 "Spoon is ignored on last turn"
 
 let turn_play_test ?(turn_amount = 1) menu hand_strat
     (test_function : player list -> unit) =
@@ -468,7 +494,7 @@ let run_test_take_out message strat =
 
 let hand_size_reduces_after_each_turn =
   let open QCheck in
-  Test.make ~count:100 ~name:"Hand size reduces after each turn"
+  Test.make ~count:1000 ~name:"Hand size reduces after each turn"
     (arbitrary_internal_game_status first_pick_strategy) (fun game_status ->
       let original_hand_size =
         List.hd (get_players_from_internal_game_status game_status)
@@ -481,7 +507,7 @@ let hand_size_reduces_after_each_turn =
 
 let table_size_is_at_most_one_bigger_after_each_turn =
   let open QCheck in
-  Test.make ~count:100 ~name:"Table size is at most one bigger after each turn"
+  Test.make ~count:1000 ~name:"Table size is at most one bigger after each turn"
     (arbitrary_internal_game_status first_pick_strategy) (fun game_status ->
       let original_sizes =
         List.map
@@ -524,7 +550,7 @@ let test_pass_hands =
 
 let test_generator_internal_game_status =
   let open QCheck in
-  Test.make ~count:100 ~name:"Generator generates properly"
+  Test.make ~count:1000 ~name:"Generator generates properly"
     (arbitrary_internal_game_status first_pick_strategy)
     (fun internal_game_status ->
       let game_status =
@@ -551,7 +577,7 @@ let face_down_can_face_dow_all_cards =
     }
   in
   let open QCheck in
-  Test.make ~count:100 ~name:"Face down all cards does so"
+  Test.make ~count:1000 ~name:"Face down all cards does so"
     (arbitrary_internal_game_status mock_take_out_box) (fun game_status ->
       let new_game_status = play_turn game_status in
       List.for_all2
@@ -657,7 +683,7 @@ let test_card_placed_implies_not_in_hand =
     }
   in
   let open QCheck in
-  Test.make ~count:100 ~name:"Card placed implies not in hand"
+  Test.make ~count:1000 ~name:"Card placed implies not in hand"
     (arbitrary_internal_game_status
        ~menu:(menu_of_default_menu MasterMenu)
        keep_track_of_playing_cards)
@@ -707,7 +733,7 @@ let test_copied_hand_is_placed =
     }
   in
   let open QCheck in
-  Test.make ~count:100 ~name:"Card copied is placed"
+  Test.make ~count:1000 ~name:"Card copied is placed"
     (arbitrary_internal_game_status keep_track_of_copied_cards)
     (fun game_status ->
       List.init 8 (fun i -> i) |> List.iter (fun i -> cards_to_copy.(i) <- []);
@@ -726,37 +752,33 @@ let test_copied_hand_is_placed =
         (get_players_from_internal_game_status next_game_status))
 
 let table_is_empty_on_turn_1 =
-  let mock_assert_empty_hand =
-    {
-      first_pick_strategy with
-      choose_card =
-        (fun game_status player_status ->
-          if game_status.current_turn = 1 then
-            if player_status.player.table = [] then
-              first_pick_strategy.choose_card game_status player_status
-            else raise (MockTestException "Hand is not empty")
-          else first_pick_strategy.choose_card game_status player_status);
-    }
-  in
-  test_strategy "Table is empty on turn 1" mock_assert_empty_hand
+  {
+    first_pick_strategy with
+    choose_card =
+      (fun game_status player_status ->
+        if game_status.current_turn = 1 then
+          if player_status.player.table = [] then
+            first_pick_strategy.choose_card game_status player_status
+          else raise (MockTestException "Hand is not empty")
+        else first_pick_strategy.choose_card game_status player_status);
+  }
+  |> test_strategy "Table is empty on turn 1"
 
 let hand_is_full_on_turn_1 =
-  let mock_assert_full_hand =
-    {
-      first_pick_strategy with
-      choose_card =
-        (fun game_status player_status ->
-          if game_status.current_turn = 1 then
-            if
-              List.length player_status.hand
-              = number_of_cards_to_deal
-                  ~nb_players:(List.length game_status.players)
-            then first_pick_strategy.choose_card game_status player_status
-            else raise (MockTestException "Hand is not full")
-          else first_pick_strategy.choose_card game_status player_status);
-    }
-  in
-  test_strategy "Hand is full on turn 1" mock_assert_full_hand
+  {
+    first_pick_strategy with
+    choose_card =
+      (fun game_status player_status ->
+        if game_status.current_turn = 1 then
+          if
+            List.length player_status.hand
+            = number_of_cards_to_deal
+                ~nb_players:(List.length game_status.players)
+          then first_pick_strategy.choose_card game_status player_status
+          else raise (MockTestException "Hand is not full")
+        else first_pick_strategy.choose_card game_status player_status);
+  }
+  |> test_strategy "Hand is full on turn 1"
 
 let test_game_ending_of_player_list () =
   Alcotest.(check bool)
@@ -1063,6 +1085,7 @@ let () =
                 play_chopsticks = (fun _ _ -> Some (Nigiri Egg));
               }
               |> test_card_is_at_pos_i ~turn_amount:2 1 (Special (Chopsticks 1)));
+          QCheck_alcotest.to_alcotest test_chopsticks_are_ignored_on_last_turn;
         ] );
       ( "Spoon",
         [
@@ -1081,6 +1104,7 @@ let () =
               |> test_card_is_at_pos_i ~turn_amount:2 2 (Special (Spoon 4)));
           QCheck_alcotest.to_alcotest
             test_spoon_choices_are_always_of_same_type_but_different;
+          QCheck_alcotest.to_alcotest test_spoon_is_ignored_on_last_turn;
         ] );
       ( "Miso Soup",
         [

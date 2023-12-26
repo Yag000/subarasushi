@@ -226,6 +226,10 @@ let initial_game_status (game_settings : game_settings) : internal_game_status =
       turn_status = initial_turn_status;
     }
 
+(** Returns the number of turns in a round *)
+let turns_per_round igs =
+  number_of_cards_to_deal ~nb_players:(List.length igs.players)
+
 let find_splayer_with_id id igs =
   List.find (fun sp -> sp.player.id = id) igs.players
 
@@ -382,16 +386,18 @@ let play_card player_id card igs =
   |> remove_card_from_played_cards player_id card
 
 let play_chopsticks player_id chopsticks_card igs =
-  let splayer = find_splayer_with_id player_id igs in
-  let gs = game_status_of_internal_game_status igs in
-  let ps = player_status_of_strategized_player splayer in
-  splayer.strategy.play_chopsticks gs ps |> function
-  | None -> igs
-  | Some card ->
-      let card = validate_card_in_hand player_id igs card in
-      igs |> sort_card player_id card
-      |> remove_card_from_table player_id chopsticks_card
-      |> add_card_to_hand player_id chopsticks_card
+  if igs.current_turn = turns_per_round igs then igs
+  else
+    let splayer = find_splayer_with_id player_id igs in
+    let gs = game_status_of_internal_game_status igs in
+    let ps = player_status_of_strategized_player splayer in
+    splayer.strategy.play_chopsticks gs ps |> function
+    | None -> igs
+    | Some card ->
+        let card = validate_card_in_hand player_id igs card in
+        igs |> sort_card player_id card
+        |> remove_card_from_table player_id chopsticks_card
+        |> add_card_to_hand player_id chopsticks_card
 
 let validate_card_in_card_list card_list card =
   if List.mem card card_list then card else raise Invalid_choice
@@ -431,42 +437,44 @@ let player_list_spoon player_id igs =
   aux [] igs.players
 
 let play_spoon player_id spoon_card igs =
-  let splayer = find_splayer_with_id player_id igs in
-  splayer.strategy.play_spoon
-    (game_status_of_internal_game_status igs)
-    (player_status_of_strategized_player splayer)
-  |> function
-  | None -> igs
-  | Some spoon_choice -> (
-      List.fold_left
-        (fun acc sp ->
-          match acc with
-          | Some _ -> acc
-          | None ->
-              let filter card =
-                match spoon_choice with
-                | Generic card_type ->
-                    CardType.card_type_of_card card = card_type
-                | Specific chosen_card -> chosen_card = card
-              in
-              let cards = List.filter filter sp.hand in
-              if Utils.is_empty cards then None
-              else if Utils.partition_list ( = ) cards |> List.length = 1 then
-                Some (sp.player.id, List.hd cards)
-              else
-                let card =
-                  sp.strategy.choose_card_to_give
-                    (game_status_of_internal_game_status igs)
-                    sp.player ~options:cards
-                  |> validate_card_in_hand sp.player.id igs
+  if igs.current_turn = turns_per_round igs then igs
+  else
+    let splayer = find_splayer_with_id player_id igs in
+    splayer.strategy.play_spoon
+      (game_status_of_internal_game_status igs)
+      (player_status_of_strategized_player splayer)
+    |> function
+    | None -> igs
+    | Some spoon_choice -> (
+        List.fold_left
+          (fun acc sp ->
+            match acc with
+            | Some _ -> acc
+            | None ->
+                let filter card =
+                  match spoon_choice with
+                  | Generic card_type ->
+                      CardType.card_type_of_card card = card_type
+                  | Specific chosen_card -> chosen_card = card
                 in
-                Some (sp.player.id, card))
-        None
-        (player_list_spoon player_id igs)
-      |> function
-      | None -> igs
-      | Some (player_id2, card) ->
-          use_spoon player_id player_id2 card ~spoon_card igs)
+                let cards = List.filter filter sp.hand in
+                if Utils.is_empty cards then None
+                else if Utils.partition_list ( = ) cards |> List.length = 1 then
+                  Some (sp.player.id, List.hd cards)
+                else
+                  let card =
+                    sp.strategy.choose_card_to_give
+                      (game_status_of_internal_game_status igs)
+                      sp.player ~options:cards
+                    |> validate_card_in_hand sp.player.id igs
+                  in
+                  Some (sp.player.id, card))
+          None
+          (player_list_spoon player_id igs)
+        |> function
+        | None -> igs
+        | Some (player_id2, card) ->
+            use_spoon player_id player_id2 card ~spoon_card igs)
 
 let flip_down_cards player_id cards igs =
   let f =
@@ -824,10 +832,7 @@ let deal_cards_at_start (internal_game_status : internal_game_status) =
 (** Play a round of Sushi Go Party. *)
 let play_round (internal_game_status : internal_game_status) :
     internal_game_status =
-  let number_of_turns =
-    number_of_cards_to_deal
-      ~nb_players:(List.length internal_game_status.players)
-  in
+  let number_of_turns = turns_per_round internal_game_status in
   List.init number_of_turns (fun _ -> ())
   |> List.fold_left
        (fun acc _ -> acc |> play_turn |> advance_one_turn)
